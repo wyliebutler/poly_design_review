@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: design_user
+      POSTGRES_PASSWORD: design_password
+      POSTGRES_DB: design_review
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U design_user -d design_review"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: "postgresql://design_user:design_password@db:5432/design_review"
+      AUTH_SECRET: "your-super-secret-key-for-v2"
+      NEXTAUTH_URL: "https://polytest.work"
+      AUTH_TRUST_HOST: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/public/uploads
+
+volumes:
+  postgres_data:

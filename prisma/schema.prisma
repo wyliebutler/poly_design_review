@@ -1,0 +1,73 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  STAFF
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  role          Role      @default(STAFF)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  projects      Project[]
+  comments      Comment[]
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?   @db.Text
+  obfuscatedId  String    @unique @default(uuid())
+  isArchived    Boolean   @default(false)
+  
+  creatorId     String
+  creator       User      @relation(fields: [creatorId], references: [id])
+  
+  revisions     Revision[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Revision {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  versionNumber Int
+  fileName      String
+  fileUrl       String
+  thumbnailUrl  String?
+  
+  comments      Comment[]
+  createdAt     DateTime  @default(now())
+}
+
+model Comment {
+  id            String    @id @default(cuid())
+  revisionId    String
+  revision      Revision  @relation(fields: [revisionId], references: [id], onDelete: Cascade)
+  
+  userId        String?   // Admin/Staff ID, null for client
+  user          User?     @relation(fields: [userId], references: [id])
+  
+  authorName    String    // "Admin" or "Client"
+  content       String    @db.Text
+  x             Float?
+  y             Float?
+  z             Float?
+  snapshotUrl   String?
+  attachmentUrl String?   // General file attachment (PDF, DOCX, PNG, JPG)
+  attachmentName String?  // Original filename for display
+  createdAt     DateTime  @default(now())
+}
