@@ -136,24 +136,41 @@ export async function deleteProject(projectId: string) {
   const session = await auth();
   if (!session?.user) throw new Error("Unauthorized");
 
-  // Get project and its revisions to delete files
+  // Get project, its revisions, and all comments to delete files
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { revisions: true },
+    include: { 
+      revisions: {
+        include: { comments: true }
+      } 
+    },
   });
 
   if (!project) throw new Error("Project not found");
 
-  // Delete files from disk
+  const uploadDir = join(process.cwd(), "public", "uploads");
+
+  // Helper to safely unlink relative URLs
+  const safeUnlink = async (url: string | null) => {
+    if (!url) return;
+    const filename = url.split("/").pop();
+    if (!filename) return;
+    const filePath = join(uploadDir, filename);
+    try {
+      await unlink(filePath);
+    } catch (err) {
+      console.error(`Failed to delete file: ${filePath}`, err);
+    }
+  };
+
+  // Delete all associated files from disk
   for (const revision of project.revisions) {
-    const filename = revision.fileUrl.split("/").pop();
-    if (filename) {
-      const filePath = join(process.cwd(), "public", "uploads", filename);
-      try {
-        await unlink(filePath);
-      } catch (err) {
-        console.error(`Failed to delete file: ${filePath}`, err);
-      }
+    await safeUnlink(revision.fileUrl);
+    await safeUnlink(revision.thumbnailUrl);
+    
+    for (const comment of revision.comments) {
+      await safeUnlink(comment.snapshotUrl);
+      await safeUnlink(comment.attachmentUrl);
     }
   }
 
