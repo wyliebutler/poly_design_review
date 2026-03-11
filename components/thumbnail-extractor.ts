@@ -30,7 +30,7 @@ export async function extractStlThumbnail(stlFile: File, width = 400, height = 3
         antialias: true, 
         preserveDrawingBuffer: true 
       });
-      renderer.setSize(width, height);
+      renderer.setSize(width, height, false);
       renderer.setClearColor("#f0fdf4");
 
       const scene = new THREE.Scene();
