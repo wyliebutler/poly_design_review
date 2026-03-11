@@ -25,3 +25,7 @@ Write-Host "Restarting application..." -ForegroundColor Yellow
 ssh ${User}@${Server} "cd ${RemotePath} && docker compose restart app"
 
 Write-Host "Deployment Complete! App is running on $Server:3000" -ForegroundColor Green
+
+# 6. Clean up unused docker images and build cache to save space
+Write-Host "Cleaning up dangling Docker images and build cache to prevent disk bloat..." -ForegroundColor Yellow
+ssh ${User}@${Server} "docker system prune -f && docker builder prune -f"
