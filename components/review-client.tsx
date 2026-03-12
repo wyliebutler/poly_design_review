@@ -75,12 +75,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     }
   }, [session]);
 
-  useEffect(() => {
-    if (initialRevision) {
-      setCurrentRevision(initialRevision);
-      setLiveComments(initialRevision.comments || []);
-    }
-  }, [initialRevision]);
+
 
   // Auto-scroll to bottom when new comments arrive
   useEffect(() => {

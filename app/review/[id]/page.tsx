@@ -34,7 +34,7 @@ export default async function ReviewPage(props: { params: Promise<{ id: string }
     const serializedProject = JSON.parse(JSON.stringify(project));
     const serializedRevision = currentRevision ? JSON.parse(JSON.stringify(currentRevision)) : null;
 
-    return <ReviewClient project={serializedProject} currentRevision={serializedRevision} />;
+    return <ReviewClient key={project.id} project={serializedProject} currentRevision={serializedRevision} />;
   } catch (error: any) {
     console.error("[V3 FATAL]", error);
     return (
