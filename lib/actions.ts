@@ -15,16 +15,20 @@ export async function createProject(formData: FormData) {
   const description = formData.get("description") as string;
   const file = formData.get("stlFile") as File;
 
+  console.log("[createProject] Starting for file:", file.name, "size:", file.size);
   if (!file || file.size === 0) {
+    console.error("[createProject] Failed: No STL file uploaded");
     throw new Error("No STL file uploaded");
   }
 
   if (!file.name.toLowerCase().endsWith(".stl")) {
+    console.error("[createProject] Failed: Not an STL file");
     throw new Error("Only .STL files are accepted");
   }
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   if (file.size > MAX_FILE_SIZE) {
+    console.error("[createProject] Failed: File size exceeds 50MB");
     throw new Error("File size exceeds 50MB limit");
   }
 
@@ -34,14 +38,21 @@ export async function createProject(formData: FormData) {
 
   // Create unique filename
   const fileExtension = file.name.split(".").pop();
-  const rawName = name.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+  const rawName = name.replace(/[^a-z0-9]/gi, "_").toLowerCase() || "unnamed";
   const uniqueFilename = `${Date.now()}-${rawName}.${fileExtension}`;
   const filePath = join(uploadDir, uniqueFilename);
+  console.log("[createProject] Generated paths, writing file to:", filePath);
 
   // Save file
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  await writeFile(filePath, buffer);
+  try {
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    await writeFile(filePath, buffer);
+    console.log("[createProject] File written successfully.");
+  } catch (err) {
+    console.error("[createProject] Failed to write file to disk:", err);
+    throw new Error("Failed to write main file");
+  }
 
   const fileUrl = `/uploads/${uniqueFilename}`;
   

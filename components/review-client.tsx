@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { MessageSquare, Clock, Send, Plus, Download, FileArchive, MapPin, Camera, X, History, Paperclip, FileText, Image as ImageIcon, ZoomIn } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -57,6 +57,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<{ url: string, type: 'snapshot' | 'image' | 'document', name?: string } | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -80,6 +81,11 @@ export default function ReviewClient({ project, currentRevision: initialRevision
       setLiveComments(initialRevision.comments || []);
     }
   }, [initialRevision]);
+
+  // Auto-scroll to bottom when new comments arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [liveComments]);
 
   // Real-time live comments via Server-Sent Events (SSE)
   useEffect(() => {
@@ -107,6 +113,35 @@ export default function ReviewClient({ project, currentRevision: initialRevision
       eventSource.close();
     };
   }, [currentRevision?.id]);
+
+  // Real-time project revisions via Server-Sent Events (SSE)
+  useEffect(() => {
+    if (!project?.id) return;
+
+    const eventSource = new EventSource(`/api/revisions/stream?projectId=${project.id}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const incomingRevisions = JSON.parse(event.data);
+        if (Array.isArray(incomingRevisions)) {
+           setProjectRevisions((prev) => {
+              // Only update if we received more revisions than we currently hold,
+              // or if we have zero to begin with. Assumes array is ordered desc by version.
+              if (incomingRevisions.length > prev.length) {
+                 return incomingRevisions;
+              }
+              return prev;
+           });
+        }
+      } catch (error) {
+        console.error("Failed to parse SSE revision data:", error);
+      }
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [project?.id]);
 
 
   const handleNameConfirm = (name: string) => {
@@ -516,7 +551,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
             const isMe = comment.authorName === authorName;
             
             return (
-              <div key={comment.id} className={`flex w-full animate-in fade-in slide-in-from-bottom-2 group/comment ${isMe ? 'justify-end' : 'justify-start'}`}>
+              <div key={comment.id} className={`flex w-full animate-in fade-in slide-in-from-bottom-2 group/comment border-b border-slate-200/60 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0 ${isMe ? 'justify-end' : 'justify-start'}`}>
                 <div className={`flex flex-col max-w-[95%] ${isMe ? 'items-end' : 'items-start'}`}>
                   
                   {/* Inline Message Body */}
@@ -608,6 +643,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
               <p className="text-[8px] font-bold mt-2">Initiate the feedback loop by posting a comment below.</p>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
 
         <div className="p-6 border-t-2 border-slate-200 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">

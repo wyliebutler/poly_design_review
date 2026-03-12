@@ -29,6 +29,9 @@ export default function Home() {
             <Link href="/dashboard" className="px-10 py-5 bg-poly-teal-light hover:bg-poly-teal-dark text-white rounded-xl font-black italic uppercase tracking-widest text-sm transition-all shadow-xl shadow-poly-teal-light/20 active:scale-95 inline-block">
               Admin Dashboard
             </Link>
+            <Link href="/system-review" className="px-10 py-5 bg-white border-2 border-slate-200 hover:border-poly-indigo hover:text-poly-indigo text-slate-700 rounded-xl font-black italic uppercase tracking-widest text-sm transition-all shadow-sm active:scale-95 inline-block flex items-center gap-2">
+              <Shield className="w-4 h-4" /> System Review
+            </Link>
           </div>
         </div>
       </div>
