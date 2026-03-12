@@ -287,9 +287,9 @@ export default function ReviewClient({ project, currentRevision: initialRevision
       setSelectedPoint(null);
       removeSnapshot();
       removeAttachment();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to post comment:", error);
-      alert("Failed to post comment");
+      alert("Failed to post comment: " + (error?.message || error));
     } finally {
       setIsPending(false);
     }

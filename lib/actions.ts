@@ -312,41 +312,44 @@ export async function postComment(formData: FormData) {
   let attachmentUrl: string | null = null;
   let attachmentName: string | null = null;
 
-  if (attachmentFile && attachmentFile.size > 0) {
-    const uploadDir = join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
-    
-    // Create unique filename but preserve extension
-    const extension = attachmentFile.name.split('.').pop();
-    const uniqueFilename = `attachment_${Date.now()}_${Math.round(Math.random() * 1000)}.${extension}`;
-    const filePath = join(uploadDir, uniqueFilename);
-    
-    const bytes = await attachmentFile.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    await writeFile(filePath, buffer);
-    
-    attachmentUrl = `/uploads/${uniqueFilename}`;
-    attachmentName = attachmentFile.name;
+  try {
+    if (attachmentFile && attachmentFile.size > 0) {
+      const uploadDir = join(process.cwd(), "public", "uploads");
+      await mkdir(uploadDir, { recursive: true });
+      
+      const extension = attachmentFile.name.split('.').pop() || "bin";
+      const uniqueFilename = `attachment_${Date.now()}_${Math.round(Math.random() * 1000)}.${extension}`;
+      const filePath = join(uploadDir, uniqueFilename);
+      
+      const bytes = await attachmentFile.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      await writeFile(filePath, buffer);
+      
+      attachmentUrl = `/uploads/${uniqueFilename}`;
+      attachmentName = attachmentFile.name;
+    }
+
+    const comment = await prisma.comment.create({
+      data: {
+        revisionId,
+        content,
+        authorName: finalAuthorName,
+        userId: null,
+        x,
+        y,
+        z,
+        snapshotUrl,
+        attachmentUrl,
+        attachmentName
+      },
+    });
+
+    revalidatePath("/review/[id]", "page");
+    return comment;
+  } catch (err: any) {
+    console.error("[SERVER ERROR] postComment failed:", err);
+    throw new Error("Failed to post comment: " + (err?.message || "Unknown error"));
   }
-
-  const comment = await prisma.comment.create({
-    data: {
-      revisionId,
-      content,
-      authorName: finalAuthorName,
-      userId: null,
-      x,
-      y,
-      z,
-      snapshotUrl,
-      attachmentUrl,
-      attachmentName
-    },
-  });
-
-  // Revalidate both the dynamic route and the specific ID if possible
-  revalidatePath("/review/[id]", "page");
-  return comment;
 }
 
 export async function getComments(revisionId: string) {
