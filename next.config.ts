@@ -8,10 +8,9 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   transpilePackages: ["three"],
-  experimental: {
-    serverActions: {
-      bodySizeLimit: "50mb",
-    },
+  serverActions: {
+    bodySizeLimit: "50mb",
+    allowedOrigins: ["polytest.work", "*.polytest.work", "localhost:3000", "192.168.2.200", "192.168.2.200:3000"],
   },
   async headers() {
     return [
