@@ -135,7 +135,7 @@ export function DiscussionSidebar({
                             <textarea
                                 value={editContent}
                                 onChange={(e) => setEditContent(e.target.value)}
-                                className="w-full text-xs p-2 rounded border border-poly-indigo focus:outline-none focus:ring-1 focus:ring-poly-indigo resize-none text-left"
+                                className="w-full bg-white text-slate-900 text-xs p-2 rounded border border-poly-indigo focus:outline-none focus:ring-1 focus:ring-poly-indigo resize-none text-left shadow-inner"
                                 rows={2}
                                 autoFocus
                             />
