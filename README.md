@@ -43,7 +43,8 @@ Create your primary `.env` config file by copying the example or generating the 
 ```bash
 # Example .env configuration
 DATABASE_URL="file:/app/prisma/dev.db"
-AUTH_SECRET="some-secure-random-string"
+AUTH_SECRET="some-secure-random-string" # Essential for NextAuth
+ADMIN_PASSWORD="my-secure-password" # Sets the dashboard access password
 NODE_ENV="production"
 ```
 
