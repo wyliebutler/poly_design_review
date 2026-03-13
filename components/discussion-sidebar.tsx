@@ -284,7 +284,7 @@ export function DiscussionSidebar({
                     <input 
                         type="file" 
                         className="hidden" 
-                        accept=".pdf,.docx,.doc,image/png,image/jpeg,image/jpg" 
+                        accept=".pdf,.docx,.doc,.txt,image/png,image/jpeg,image/jpg" 
                         onChange={handleAttachmentSelect}
                         disabled={isPending}
                     />

@@ -214,10 +214,10 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     if (!file) return;
 
     const isImage = file.type.startsWith('image/');
-    const isDoc = file.type === 'application/pdf' || file.name.endsWith('.docx') || file.name.endsWith('.doc');
+    const isDoc = file.type === 'application/pdf' || file.name.endsWith('.docx') || file.name.endsWith('.doc') || file.name.endsWith('.txt');
 
     if (!isImage && !isDoc) {
-      toast.error("Invalid File Type", { description: "Only PDF, DOCX, PNG, and JPG files are supported." });
+      toast.error("Invalid File Type", { description: "Only PDF, DOCX, TXT, PNG, and JPG files are supported." });
       return;
     }
 
