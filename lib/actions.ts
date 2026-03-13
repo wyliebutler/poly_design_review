@@ -438,3 +438,75 @@ export async function getFullProjectHistory(projectId: string): Promise<{ error?
     return { error: "Failed to fetch project history from database" };
   }
 }
+
+export async function editComment(commentId: string, content: string, clientAuthorName: string): Promise<{ error?: string } | import("@prisma/client").Comment> {
+  const session = await auth();
+  
+  if (!commentId || !content.trim()) return { error: "Invalid input" };
+  
+  try {
+    const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+    if (!comment) return { error: "Comment not found" };
+    
+    // Security check: Either user is Admin with active session, or their authorName matches
+    const isOwner = comment.authorName === clientAuthorName;
+    const isAdmin = !!session?.user;
+    
+    if (!isOwner && !isAdmin) {
+      return { error: "Unauthorized to edit this comment" };
+    }
+    
+    const updatedComment = await prisma.comment.update({
+      where: { id: commentId },
+      data: { content },
+    });
+    
+    return updatedComment;
+  } catch (error) {
+    console.error("[SERVER ERROR] Failed to edit comment:", error);
+    return { error: "Failed to update comment" };
+  }
+}
+
+export async function deleteComment(commentId: string, clientAuthorName: string): Promise<{ error?: string, success?: boolean }> {
+  const session = await auth();
+  
+  if (!commentId) return { error: "Invalid comment ID" };
+  
+  try {
+    const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+    if (!comment) return { error: "Comment not found" };
+    
+    // Security check: Either user is Admin with active session, or their authorName matches
+    const isOwner = comment.authorName === clientAuthorName;
+    const isAdmin = !!session?.user;
+    
+    if (!isOwner && !isAdmin) {
+      return { error: "Unauthorized to delete this comment" };
+    }
+    
+    // Delete files associated with the comment
+    const uploadDir = join(process.cwd(), "public", "uploads");
+    const safeUnlink = async (url: string | null) => {
+      if (!url) return;
+      const filename = url.split("/").pop();
+      if (!filename) return;
+      const filePath = join(uploadDir, filename);
+      try {
+        await unlink(filePath);
+      } catch (err) {
+        console.error(`Failed to delete file: ${filePath}`, err);
+      }
+    };
+    
+    await safeUnlink(comment.snapshotUrl);
+    await safeUnlink(comment.attachmentUrl);
+    
+    await prisma.comment.delete({ where: { id: commentId } });
+    
+    return { success: true };
+  } catch (error) {
+    console.error("[SERVER ERROR] Failed to delete comment:", error);
+    return { error: "Failed to delete comment" };
+  }
+}

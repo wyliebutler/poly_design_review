@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect } from "react";
-import { MessageSquare, Clock, FileArchive, MapPin, ZoomIn, FileText, Camera, Paperclip, X, Send, ImageIcon, Download } from "lucide-react";
+import { MessageSquare, Clock, FileArchive, MapPin, ZoomIn, FileText, Camera, Paperclip, X, Send, ImageIcon, Download, Edit2, Trash2, Check } from "lucide-react";
 import type { Comment } from "@prisma/client";
 
 interface DiscussionSidebarProps {
@@ -24,6 +24,8 @@ interface DiscussionSidebarProps {
   setSelectedPoint: (p: null) => void;
   captureSnapshot: () => void;
   handleAttachmentSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleEditComment: (commentId: string, newContent: string) => Promise<void>;
+  handleDeleteComment: (commentId: string) => Promise<void>;
 }
 
 export function DiscussionSidebar({
@@ -45,9 +47,16 @@ export function DiscussionSidebar({
   removeAttachment,
   setSelectedPoint,
   captureSnapshot,
-  handleAttachmentSelect
+  handleAttachmentSelect,
+  handleEditComment,
+  handleDeleteComment
 }: DiscussionSidebarProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editContent, setEditContent] = React.useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = React.useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const prevCommentsLengthRef = useRef(0);
   const initialScrollDone = useRef(false);
@@ -102,6 +111,7 @@ export function DiscussionSidebar({
       <div className="flex-grow overflow-y-auto p-4 space-y-2 flex flex-col">
         {liveComments?.map((c) => {
           const isMe = c.authorName === authorName;
+          const canModify = isMe || isAdminUser;
           const hasPin = c.x !== null && c.y !== null && c.z !== null;
           const pinNumber = hasPin ? pinnedComments.findIndex(pc => pc.id === c.id) + 1 : null;
           
@@ -111,7 +121,7 @@ export function DiscussionSidebar({
                 
                 {/* Inline Message Body */}
                 <div className={`relative flex items-start gap-1.5 text-xs outline-none leading-relaxed text-left break-words w-full ${isMe ? 'flex-row-reverse text-right' : 'flex-row text-left'}`}>
-                    <div className={`font-black tracking-wider whitespace-nowrap pt-0.5 ${c.authorName === 'Admin' ? 'text-poly-teal-dark' : isMe ? 'text-poly-indigo' : 'text-slate-500'}`}>
+                    <div className={`font-black tracking-wider whitespace-nowrap pt-0.5 flex-shrink-0 ${c.authorName === 'Admin' ? 'text-poly-teal-dark' : isMe ? 'text-poly-indigo' : 'text-slate-500'}`}>
                       {hasPin && (
                         <span className="inline-flex bg-poly-indigo text-white w-3.5 h-3.5 rounded-full items-center justify-center text-[7px] mr-1 align-text-top mt-0.5">
                           {pinNumber}
@@ -119,14 +129,90 @@ export function DiscussionSidebar({
                       )}
                       {c.authorName}:
                     </div>
-                    <div className={`font-medium whitespace-pre-wrap ${isMe ? 'text-slate-800' : 'text-slate-600'}`}>
-                      {c.content}
-                    </div>
 
-                  {c.x !== null && (
+                    {editingId === c.id ? (
+                        <div className="flex-grow flex flex-col gap-2 w-full mt-0.5">
+                            <textarea
+                                value={editContent}
+                                onChange={(e) => setEditContent(e.target.value)}
+                                className="w-full text-xs p-2 rounded border border-poly-indigo focus:outline-none focus:ring-1 focus:ring-poly-indigo resize-none text-left"
+                                rows={2}
+                                autoFocus
+                            />
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    onClick={() => { setEditingId(null); setEditContent(""); }}
+                                    className="text-[10px] text-slate-500 hover:text-slate-700 font-bold px-2 py-1 uppercase tracking-wider"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (editContent.trim() !== c.content) {
+                                            await handleEditComment(c.id, editContent);
+                                        }
+                                        setEditingId(null);
+                                    }}
+                                    disabled={!editContent.trim()}
+                                    className="text-[10px] bg-poly-indigo text-white px-3 py-1 rounded shadow-sm hover:bg-poly-indigo/90 font-bold uppercase tracking-wider disabled:opacity-50"
+                                >
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className={`font-medium whitespace-pre-wrap ${isMe ? 'text-slate-800' : 'text-slate-600'}`}>
+                          {c.content}
+                        </div>
+                    )}
+
+                  {canModify && editingId !== c.id && (
+                      <div className={`opacity-0 group-hover/comment:opacity-100 transition-opacity flex gap-1 items-center flex-shrink-0 ${isMe ? 'mr-0' : 'ml-0'}`}>
+                          {confirmDeleteId === c.id ? (
+                                <div className="flex items-center gap-1 bg-red-50 border border-red-200 rounded px-1 py-0.5 animate-in fade-in slide-in-from-right-2 z-10">
+                                    <span className="text-[9px] font-bold text-red-600 uppercase tracking-wider mx-1">Delete?</span>
+                                    <button
+                                        onClick={async () => { setIsDeleting(true); await handleDeleteComment(c.id); setIsDeleting(false); setConfirmDeleteId(null); }}
+                                        disabled={isDeleting}
+                                        className="text-red-600 hover:text-white hover:bg-red-600 rounded p-0.5 transition-colors disabled:opacity-50"
+                                        title="Confirm Delete"
+                                    >
+                                        {isDeleting ? <Clock className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                    </button>
+                                    <button
+                                        onClick={() => setConfirmDeleteId(null)}
+                                        disabled={isDeleting}
+                                        className="text-slate-500 hover:text-slate-800 hover:bg-slate-200 rounded p-0.5 transition-colors disabled:opacity-50"
+                                        title="Cancel"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                </div>
+                          ) : (
+                                <>
+                                    <button
+                                        onClick={() => { setEditingId(c.id); setEditContent(c.content); setConfirmDeleteId(null); }}
+                                        className="text-slate-400 hover:text-poly-indigo bg-white border border-slate-200 rounded p-1 shadow-sm transition-all"
+                                        title="Edit comment"
+                                    >
+                                        <Edit2 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                        onClick={() => setConfirmDeleteId(c.id)}
+                                        className="text-slate-400 hover:text-red-500 bg-white border border-slate-200 rounded p-1 shadow-sm transition-all"
+                                        title="Delete comment"
+                                    >
+                                        <Trash2 className="w-3 h-3" />
+                                    </button>
+                                </>
+                          )}
+                      </div>
+                  )}
+
+                  {c.x !== null && editingId !== c.id && (
                     <button 
                       onClick={() => setCameraTarget({ x: c.x as number, y: c.y as number, z: c.z as number })}
-                      className="text-poly-teal-dark bg-white border border-slate-200 rounded-full p-1 shadow-sm hover:text-white hover:bg-poly-teal-dark hover:scale-110 opacity-0 group-hover/comment:opacity-100 transition-all ml-1 flex-shrink-0"
+                      className="text-poly-teal-dark bg-white border border-slate-200 rounded p-1 shadow-sm hover:text-white hover:bg-poly-teal-dark hover:scale-110 opacity-0 group-hover/comment:opacity-100 transition-all ml-1 flex-shrink-0"
                       title={`Fly to Pin at [${(c.x as number).toFixed(1)}, ${(c.y as number).toFixed(1)}, ${(c.z as number).toFixed(1)}]`}
                     >
                       <MapPin className="h-3 w-3" />

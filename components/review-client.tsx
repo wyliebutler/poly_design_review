@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { MessageSquare, Clock, Send, Plus, Download, FileArchive, MapPin, Camera, X, History, Paperclip, FileText, Image as ImageIcon, ZoomIn } from "lucide-react";
 import { useSession } from "next-auth/react";
 import JSZip from "jszip";
-import { postComment, uploadRevision, getComments, getFullProjectHistory } from "@/lib/actions";
+import { postComment, uploadRevision, getComments, getFullProjectHistory, editComment, deleteComment } from "@/lib/actions";
 import type { ProjectWithRevisions, RevisionWithComments } from "@/lib/actions";
 import type { Comment } from "@prisma/client";
 import AuthorNameModal from "@/components/author-name-modal";
@@ -318,6 +318,43 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     }
   }, [comment, isPending, currentRevision, isAdminUser, authorName, selectedPoint, snapshotFile, attachmentFile, removeSnapshot, removeAttachment]);
 
+  const handleEditComment = React.useCallback(async (commentId: string, newContent: string) => {
+    setIsPending(true);
+    try {
+      const result = await editComment(commentId, newContent, authorName);
+      if (result && "error" in result) {
+        toast.error("Edit Failed", { description: result.error });
+        return;
+      }
+      toast.success("Comment Updated");
+      // Assuming SSE will sync eventually, but optimistic UI helps
+      setLiveComments(prev => prev.map(c => c.id === commentId ? { ...c, content: newContent } : c));
+    } catch (error: any) {
+      console.error("Failed to edit comment:", error);
+      toast.error("Edit Failed", { description: error?.message || String(error) });
+    } finally {
+      setIsPending(false);
+    }
+  }, [authorName]);
+
+  const handleDeleteComment = React.useCallback(async (commentId: string) => {
+    setIsPending(true);
+    try {
+      const result = await deleteComment(commentId, authorName);
+      if (result && result.error) {
+        toast.error("Delete Failed", { description: result.error });
+        return;
+      }
+      toast.success("Comment Deleted");
+      setLiveComments(prev => prev.filter(c => c.id !== commentId));
+    } catch (error: any) {
+      console.error("Failed to delete comment:", error);
+      toast.error("Delete Failed", { description: error?.message || String(error) });
+    } finally {
+      setIsPending(false);
+    }
+  }, [authorName]);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || isPending) return;
@@ -549,6 +586,8 @@ export default function ReviewClient({ project, currentRevision: initialRevision
         setSelectedPoint={setSelectedPoint as any}
         captureSnapshot={captureSnapshot}
         handleAttachmentSelect={handleAttachmentSelect}
+        handleEditComment={handleEditComment}
+        handleDeleteComment={handleDeleteComment}
       />
 
       {/* Media Viewer Modal */}
