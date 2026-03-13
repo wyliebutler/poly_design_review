@@ -1,11 +1,13 @@
 "use client";
 
 import { Canvas, useLoader, useThree, useFrame } from "@react-three/fiber";
+import type { ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Stage, Html, Line, PerspectiveCamera, Bounds } from "@react-three/drei";
-import { Suspense, useState, useMemo, useRef, useEffect } from "react";
+import { Suspense, useState, useMemo, useRef, useEffect, memo } from "react";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box } from "lucide-react";
 import * as THREE from "three";
+import type { Comment } from "@prisma/client";
 import { ErrorBoundary } from "./error-boundary";
 
 function Model({ 
@@ -110,7 +112,7 @@ function Model({
     clipPlaneObj.applyMatrix4(meshRef.current.matrixWorld);
   });
 
-  const handlePointerMove = (e: any) => {
+  const handlePointerMove = (e: ThreeEvent<PointerEvent>) => {
     if (!showMeasurements) {
       if (onSnapPointChange) onSnapPointChange(null);
       return;
@@ -159,7 +161,7 @@ function Model({
            const localSnapPoint = meshRef.current.worldToLocal(closestVertex.clone());
            // Instead of just passing a point, we now pass an object with more info (e.g., normal)
            if (onSnapPointChange) {
-             const faceNormal = face.normal.clone().applyDirection(meshRef.current.matrixWorld).normalize();
+             const faceNormal = face.normal.clone().transformDirection(meshRef.current.matrixWorld).normalize();
              onSnapPointChange({
                position: localSnapPoint,
                normal: faceNormal,
@@ -179,7 +181,7 @@ function Model({
     if (onSnapPointChange) onSnapPointChange(null);
   };
 
-  const handlePointerUp = (e: any) => {
+  const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
     if (!pinMode && !showMeasurements) return;
     
     // Don't register a pin/measure point if they were dragging the camera
@@ -314,7 +316,7 @@ function FallbackLoader() {
   );
 }
 
-export default function StlViewer({ 
+const StlViewerComponent = ({ 
   url, 
   preloadUrls = [],
   comments = [], 
@@ -324,11 +326,11 @@ export default function StlViewer({
 }: { 
   url: string,
   preloadUrls?: string[],
-  comments?: any[],
+  comments?: Comment[],
   onPointSelected?: (point: { x: number, y: number, z: number } | null) => void,
   selectedPoint?: { x: number, y: number, z: number } | null,
   cameraTarget?: { x: number, y: number, z: number } | null
-}) {
+}) => {
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [showSlice, setShowSlice] = useState(false);
   const [sliceAmount, setSliceAmount] = useState(100);
@@ -406,8 +408,8 @@ export default function StlViewer({
             />
             
             {/* Render Existing Pins */}
-            {comments.filter(c => c.x !== null).map((comment, idx) => (
-              <Html key={comment.id} position={[comment.x, comment.y, comment.z]} center zIndexRange={[100, 0]}>
+            {comments.filter(c => c.x !== null && c.y !== null && c.z !== null).map((comment, idx) => (
+              <Html key={comment.id} position={[comment.x as number, comment.y as number, comment.z as number]} center zIndexRange={[100, 0]}>
                 <div className="relative group/pin flex items-center justify-center">
                   <div 
                     onClick={(e) => { e.stopPropagation(); setActivePin(activePin === comment.id ? null : comment.id); }}
@@ -735,4 +737,21 @@ export default function StlViewer({
       )}
     </div>
   );
-}
+};
+
+export default memo(StlViewerComponent, (prevProps, nextProps) => {
+  if (prevProps.url !== nextProps.url) return false;
+  
+  if (prevProps.comments?.length !== nextProps.comments?.length) return false;
+  
+  // Custom deep equality checks for React objects
+  if (prevProps.selectedPoint?.x !== nextProps.selectedPoint?.x) return false;
+  if (prevProps.selectedPoint?.y !== nextProps.selectedPoint?.y) return false;
+  if (prevProps.selectedPoint?.z !== nextProps.selectedPoint?.z) return false;
+  
+  if (prevProps.cameraTarget?.x !== nextProps.cameraTarget?.x) return false;
+  if (prevProps.cameraTarget?.y !== nextProps.cameraTarget?.y) return false;
+  if (prevProps.cameraTarget?.z !== nextProps.cameraTarget?.z) return false;
+  
+  return true;
+});

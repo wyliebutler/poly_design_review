@@ -13,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 import Providers from "@/components/providers";
 import Navbar from "@/components/navbar";
+import { Toaster } from "sonner";
 
 export default function RootLayout({
   children,
@@ -27,6 +28,7 @@ export default function RootLayout({
           <main className="pt-16">
             {children}
           </main>
+          <Toaster position="bottom-right" />
         </Providers>
       </body>
     </html>

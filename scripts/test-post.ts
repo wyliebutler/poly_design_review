@@ -24,7 +24,11 @@ async function run() {
 
   try {
     const comment = await postComment(formData);
-    console.log("Success! Comment ID:", comment.id);
+    if (comment && "error" in comment) {
+      console.error("SERVER RETURNED ERROR:", comment.error);
+    } else {
+      console.log("Success! Comment ID:", (comment as {id: string})?.id);
+    }
   } catch (err: any) {
     console.error("SERVER ERROR REPRODUCED:");
     console.error(err.message, err.stack);

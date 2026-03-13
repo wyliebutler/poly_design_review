@@ -4,10 +4,11 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Link as LinkIcon, Eye, Archive, Trash2, Check, RefreshCw, Box } from "lucide-react";
 import { archiveProject, unarchiveProject, deleteProject } from "@/lib/actions";
+import type { ProjectWithRevisions } from "@/lib/actions";
 import EditProjectModal from "@/components/edit-project-modal";
 
 interface ProjectListProps {
-  projects: any[];
+  projects: ProjectWithRevisions[];
 }
 
 export default function ProjectList({ projects = [] }: ProjectListProps) {
@@ -76,12 +77,13 @@ export default function ProjectList({ projects = [] }: ProjectListProps) {
     }
   };
 
-  const formatDate = (dateStr: string) => {
+  const formatDate = (input: string | Date) => {
     if (!mounted) return "...";
     try {
-      return new Date(dateStr).toLocaleDateString();
+      const date = input instanceof Date ? input : new Date(input);
+      return date.toLocaleDateString();
     } catch {
-      return dateStr;
+      return String(input);
     }
   };
 

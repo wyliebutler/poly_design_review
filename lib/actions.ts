@@ -4,12 +4,29 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 
+import { Prisma } from "@prisma/client";
 import { writeFile, mkdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
-export async function createProject(formData: FormData) {
+export type ProjectWithRevisions = Prisma.ProjectGetPayload<{
+  include: {
+    revisions: {
+      include: {
+        comments: true;
+      };
+    };
+  };
+}>;
+
+export type RevisionWithComments = Prisma.RevisionGetPayload<{
+  include: {
+    comments: true;
+  };
+}>;
+
+export async function createProject(formData: FormData): Promise<{ error?: string } | ProjectWithRevisions> {
   const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  if (!session?.user) return { error: "Unauthorized" };
 
   const name = formData.get("name") as string;
   const description = formData.get("description") as string;
@@ -18,18 +35,18 @@ export async function createProject(formData: FormData) {
   console.log("[createProject] Starting for file:", file.name, "size:", file.size);
   if (!file || file.size === 0) {
     console.error("[createProject] Failed: No STL file uploaded");
-    throw new Error("No STL file uploaded");
+    return { error: "No STL file uploaded" };
   }
 
   if (!file.name.toLowerCase().endsWith(".stl")) {
     console.error("[createProject] Failed: Not an STL file");
-    throw new Error("Only .STL files are accepted");
+    return { error: "Only .STL files are accepted" };
   }
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   if (file.size > MAX_FILE_SIZE) {
     console.error("[createProject] Failed: File size exceeds 50MB");
-    throw new Error("File size exceeds 50MB limit");
+    return { error: "File size exceeds 50MB limit" };
   }
 
   // Ensure upload directory exists
@@ -51,7 +68,7 @@ export async function createProject(formData: FormData) {
     console.log("[createProject] File written successfully.");
   } catch (err) {
     console.error("[createProject] Failed to write file to disk:", err);
-    throw new Error("Failed to write main file");
+    return { error: "Failed to write main file" };
   }
 
   const fileUrl = `/uploads/${uniqueFilename}`;
@@ -81,24 +98,36 @@ export async function createProject(formData: FormData) {
     }
   });
 
-  const project = await prisma.project.create({
-    data: {
-      name,
-      description,
-      creatorId: user.id,
-      revisions: {
-        create: {
-          versionNumber: 1,
-          fileName: file.name,
-          fileUrl: fileUrl,
-          thumbnailUrl: thumbnailUrl,
+  try {
+    const project = await prisma.project.create({
+      data: {
+        name,
+        description,
+        creatorId: user.id,
+        revisions: {
+          create: {
+            versionNumber: 1,
+            fileName: file.name,
+            fileUrl: fileUrl,
+            thumbnailUrl: thumbnailUrl,
+          },
         },
       },
-    },
-  });
+      include: {
+        revisions: {
+          include: {
+            comments: true
+          }
+        }
+      }
+    });
 
-  revalidatePath("/dashboard");
-  return project;
+    revalidatePath("/dashboard");
+    return project;
+  } catch (error) {
+    console.error("Database error creating project:", error);
+    return { error: "Failed to create project in database" };
+  }
 }
 
 export async function updateProject(projectId: string, formData: FormData) {
@@ -193,17 +222,17 @@ export async function deleteProject(projectId: string) {
   revalidatePath("/dashboard");
 }
 
-export async function uploadRevision(projectId: string, formData: FormData) {
+export async function uploadRevision(projectId: string, formData: FormData): Promise<{ error?: string } | RevisionWithComments> {
   const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  if (!session?.user) return { error: "Unauthorized" };
 
   const file = formData.get("stlFile") as File;
-  if (!file || file.size === 0) throw new Error("No STL file uploaded");
-  if (!file.name.toLowerCase().endsWith(".stl")) throw new Error("Only .STL files are accepted");
+  if (!file || file.size === 0) return { error: "No STL file uploaded" };
+  if (!file.name.toLowerCase().endsWith(".stl")) return { error: "Only .STL files are accepted" };
 
   const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error("File size exceeds 50MB limit");
+    return { error: "File size exceeds 50MB limit" };
   }
 
   // Get project to determine next version number
@@ -212,7 +241,7 @@ export async function uploadRevision(projectId: string, formData: FormData) {
     include: { revisions: { orderBy: { versionNumber: "desc" }, take: 1 } },
   });
 
-  if (!project) throw new Error("Project not found");
+  if (!project) return { error: "Project not found" };
 
   const nextVersion = (project.revisions[0]?.versionNumber || 0) + 1;
 
@@ -224,9 +253,14 @@ export async function uploadRevision(projectId: string, formData: FormData) {
   const uniqueFilename = `${Date.now()}-${rawProjectName}-v${nextVersion}.${fileExtension}`;
   const filePath = join(uploadDir, uniqueFilename);
 
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  await writeFile(filePath, buffer);
+  try {
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    await writeFile(filePath, buffer);
+  } catch (e) {
+    console.error("Failed to write replacement STL file to disk:", e);
+    return { error: "Failed to write STL file to disk" };
+  }
 
   const fileUrl = `/uploads/${uniqueFilename}`;
   
@@ -243,23 +277,30 @@ export async function uploadRevision(projectId: string, formData: FormData) {
     thumbnailUrl = `/uploads/${thumbFilename}`;
   }
 
-  // Create new revision
-  const revision = await prisma.revision.create({
-    data: {
-      projectId,
-      versionNumber: nextVersion,
-      fileName: file.name,
-      fileUrl: fileUrl,
-      thumbnailUrl: thumbnailUrl,
-    },
-  });
+  try {
+    const revision = await prisma.revision.create({
+      data: {
+        projectId,
+        versionNumber: nextVersion,
+        fileName: file.name,
+        fileUrl: fileUrl,
+        thumbnailUrl: thumbnailUrl,
+      },
+      include: {
+        comments: true
+      }
+    });
 
-  revalidatePath("/dashboard");
-  revalidatePath(`/review/${project.obfuscatedId}`);
-  return revision;
+    revalidatePath("/dashboard");
+    revalidatePath(`/review/${project.obfuscatedId}`);
+    return revision;
+  } catch (error) {
+    console.error("Database error creating revision:", error);
+    return { error: "Failed to save revision to database" };
+  }
 }
 
-export async function postComment(formData: FormData) {
+export async function postComment(formData: FormData): Promise<{ error?: string } | import("@prisma/client").Comment> {
   const revisionId = formData.get("revisionId") as string;
   const content = formData.get("content") as string;
   const isAuthorAdmin = formData.get("isAuthorAdmin") === "true";
@@ -278,17 +319,24 @@ export async function postComment(formData: FormData) {
   // But strictly require session if admin is posting
   if (isAuthorAdmin && !session?.user) {
     console.warn("[SERVER DEBUG] Unauthorized attempt to post admin comment without session.");
-    throw new Error("Unauthorized");
+    return { error: "Unauthorized access detected." };
   }
 
-  // Determine the final author name to store
-  let finalAuthorName = authorName || (isAuthorAdmin ? "Admin" : "Client");
-  console.log("[SERVER DEBUG] Initial finalAuthorName:", finalAuthorName);
-
-  // If logged in, use their actual name if available
-  if (session?.user?.name && isAuthorAdmin) {
-    finalAuthorName = session.user.name;
+  // Determine the final author name to store:
+  // Priority 1: Explicitly provided authorName (e.g., from UI modal)
+  // Priority 2: Admin session name
+  // Priority 3: Default fallbacks
+  let finalAuthorName = authorName;
+  
+  if (!finalAuthorName) {
+    if (session?.user?.name && isAuthorAdmin) {
+      finalAuthorName = session.user.name;
+    } else {
+      finalAuthorName = isAuthorAdmin ? "Admin" : "Client";
+    }
   }
+  
+  console.log("[SERVER DEBUG] Evaluated finalAuthorName:", finalAuthorName);
 
   // Set userId: null to avoid foreign key errors if the user isn't in the DB
   const userIdToLink = isAuthorAdmin && session?.user?.id ? session.user.id : null;
@@ -344,11 +392,10 @@ export async function postComment(formData: FormData) {
       },
     });
 
-    revalidatePath("/review/[id]", "page");
     return comment;
   } catch (err: any) {
     console.error("[SERVER ERROR] postComment failed:", err);
-    throw new Error("Failed to post comment: " + (err?.message || "Unknown error"));
+    return { error: "Failed to post comment: " + (err?.message || "Unknown error") };
   }
 }
 
@@ -365,9 +412,9 @@ export async function getComments(revisionId: string) {
   }
 }
 
-export async function getFullProjectHistory(projectId: string) {
+export async function getFullProjectHistory(projectId: string): Promise<{ error?: string } | ProjectWithRevisions> {
   const session = await auth();
-  if (!session?.user) throw new Error("Unauthorized");
+  if (!session?.user) return { error: "Unauthorized" };
 
   try {
     const project = await prisma.project.findUnique({
@@ -383,9 +430,11 @@ export async function getFullProjectHistory(projectId: string) {
         }
       }
     });
+    
+    if (!project) return { error: "Project not found" };
     return project;
   } catch (error) {
     console.error("[SERVER ERROR] Failed to fetch full project history: ", error);
-    return null;
+    return { error: "Failed to fetch project history from database" };
   }
 }

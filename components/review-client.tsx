@@ -6,8 +6,13 @@ import { MessageSquare, Clock, Send, Plus, Download, FileArchive, MapPin, Camera
 import { useSession } from "next-auth/react";
 import JSZip from "jszip";
 import { postComment, uploadRevision, getComments, getFullProjectHistory } from "@/lib/actions";
+import type { ProjectWithRevisions, RevisionWithComments } from "@/lib/actions";
+import type { Comment } from "@prisma/client";
 import AuthorNameModal from "@/components/author-name-modal";
+import { HistorySidebar } from "@/components/history-sidebar";
+import { DiscussionSidebar } from "@/components/discussion-sidebar";
 import { extractStlThumbnail } from "./thumbnail-extractor";
+import { toast } from "sonner";
 
 
 const StlViewer = dynamic(() => import("@/components/stl-viewer"), {
@@ -20,12 +25,12 @@ const StlViewer = dynamic(() => import("@/components/stl-viewer"), {
 });
 
 interface ReviewClientProps {
-  project: any;
-  currentRevision: any;
+  project: ProjectWithRevisions;
+  currentRevision: RevisionWithComments;
 }
 
 // Helper to find adjacent revisions
-const getAdjacentRevisionUrls = (currentRev: any, allRevisions: any[]) => {
+const getAdjacentRevisionUrls = (currentRev: RevisionWithComments, allRevisions: RevisionWithComments[]) => {
   if (!currentRev || !allRevisions || allRevisions.length === 0) return [];
   const currentIndex = allRevisions.findIndex(r => r.id === currentRev.id);
   if (currentIndex === -1) return [];
@@ -45,9 +50,9 @@ export default function ReviewClient({ project, currentRevision: initialRevision
   const [comment, setComment] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [currentRevision, setCurrentRevision] = useState(initialRevision);
-  const [liveComments, setLiveComments] = useState<any[]>(initialRevision?.comments || []);
-  const [projectRevisions, setProjectRevisions] = useState<any[]>(project.revisions || []);
+  const [currentRevision, setCurrentRevision] = useState<RevisionWithComments>(initialRevision);
+  const [liveComments, setLiveComments] = useState<Comment[]>(initialRevision?.comments || []);
+  const [projectRevisions, setProjectRevisions] = useState<RevisionWithComments[]>(project.revisions || []);
   const [authorName, setAuthorName] = useState("");
   const [showNameModal, setShowNameModal] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<{ x: number, y: number, z: number } | null>(null);
@@ -57,7 +62,15 @@ export default function ReviewClient({ project, currentRevision: initialRevision
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   const [selectedMedia, setSelectedMedia] = useState<{ url: string, type: 'snapshot' | 'image' | 'document', name?: string } | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const highestKnownVersion = useRef<number>(initialRevision?.versionNumber || 0);
+
+  const handlePointSelected = React.useCallback((point: { x: number, y: number, z: number } | null) => {
+    setSelectedPoint(point);
+  }, []);
+
+  const sortedLiveComments = React.useMemo(() => {
+    return [...liveComments].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [liveComments]);
 
   useEffect(() => {
     setMounted(true);
@@ -74,13 +87,6 @@ export default function ReviewClient({ project, currentRevision: initialRevision
       }
     }
   }, [session]);
-
-
-
-  // Auto-scroll to bottom when new comments arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [liveComments]);
 
   // Real-time live comments via Server-Sent Events (SSE)
   useEffect(() => {
@@ -99,8 +105,6 @@ export default function ReviewClient({ project, currentRevision: initialRevision
 
     eventSource.onerror = (error) => {
       // Typically, EventSource automatically reconnects. 
-      // If we need custom fallback logic, handle it here.
-      console.error("SSE connection error:", error);
     };
 
     // Teardown the persistent connection on unmount or revision change
@@ -118,18 +122,30 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     eventSource.onmessage = (event) => {
       try {
         const incomingRevisions = JSON.parse(event.data);
-        if (Array.isArray(incomingRevisions)) {
+        if (Array.isArray(incomingRevisions) && incomingRevisions.length > 0) {
+           const latest = incomingRevisions[0];
+
            setProjectRevisions((prev) => {
-              // Only update if we received more revisions than we currently hold,
-              // or if we have zero to begin with. Assumes array is ordered desc by version.
               if (incomingRevisions.length > prev.length) {
                  return incomingRevisions;
               }
               return prev;
            });
+
+           // Auto-switch to newest revision ONLY IF it's genuinely newer than any we've seen before
+           if (latest.versionNumber > highestKnownVersion.current) {
+              highestKnownVersion.current = latest.versionNumber;
+              
+              setCurrentRevision(() => {
+                 toast.info(`New Revision ${latest.versionNumber} uploaded! Switching view...`);
+                 // Defer the comment update slightly to ensure state batches correctly
+                 setTimeout(() => setLiveComments(latest.comments || []), 0);
+                 return latest;
+              });
+           }
         }
       } catch (error) {
-        console.error("Failed to parse SSE revision data:", error);
+        // SSE Revision Parse Error
       }
     };
 
@@ -180,20 +196,20 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     }
   };
 
-  const removeSnapshot = () => {
+  const removeSnapshot = React.useCallback(() => {
     setSnapshotFile(null);
     if (snapshotPreview) {
       URL.revokeObjectURL(snapshotPreview);
       setSnapshotPreview(null);
     }
-  };
+  }, [snapshotPreview]);
 
-  const removeAttachment = () => {
+  const removeAttachment = React.useCallback(() => {
     setAttachmentFile(null);
     setAttachmentName(null);
-  };
+  }, []);
 
-  const handleAttachmentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAttachmentSelect = React.useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -201,7 +217,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     const isDoc = file.type === 'application/pdf' || file.name.endsWith('.docx') || file.name.endsWith('.doc');
 
     if (!isImage && !isDoc) {
-      alert("Only PDF, DOCX, PNG, and JPG files are supported.");
+      toast.error("Invalid File Type", { description: "Only PDF, DOCX, PNG, and JPG files are supported." });
       return;
     }
 
@@ -255,9 +271,9 @@ export default function ReviewClient({ project, currentRevision: initialRevision
       setAttachmentFile(file);
       setAttachmentName(file.name);
     }
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = React.useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!comment.trim() || isPending || !currentRevision) return;
 
@@ -281,19 +297,26 @@ export default function ReviewClient({ project, currentRevision: initialRevision
         formData.append("attachment", attachmentFile);
       }
 
-      const newComment = await postComment(formData);
-      setLiveComments(prev => [...prev, newComment]);
+      const result = await postComment(formData);
+      
+      if (result && "error" in result) {
+        toast.error("Upload Failed", { description: result.error });
+        return;
+      }
+      
+      setLiveComments(prev => [...prev, result as Comment]);
       setComment("");
       setSelectedPoint(null);
       removeSnapshot();
       removeAttachment();
+      toast.success("Comment Posted");
     } catch (error: any) {
       console.error("Failed to post comment:", error);
-      alert("Failed to post comment: " + (error?.message || error));
+      toast.error("Upload Failed", { description: error?.message || String(error) });
     } finally {
       setIsPending(false);
     }
-  };
+  }, [comment, isPending, currentRevision, isAdminUser, authorName, selectedPoint, snapshotFile, attachmentFile, removeSnapshot, removeAttachment]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -315,23 +338,35 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     }
 
     try {
-      const newRev = await uploadRevision(project.id, formData);
+      const result = await uploadRevision(project.id, formData);
+      
+      if (result && "error" in result) {
+        toast.error("Upload Failed", { description: result.error });
+        return;
+      }
+
+      const newRev: RevisionWithComments = { ...(result as RevisionWithComments), comments: [] };
       setCurrentRevision(newRev);
       setLiveComments([]);
       setProjectRevisions((prev) => [newRev, ...prev]);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload failed:", error);
-      alert("Upload failed. STL files only.");
+      toast.error("Upload Failed", { description: error?.message || "STL files only." });
     } finally {
       setIsPending(false);
     }
   };
 
-  const handleExportZip = async () => {
+  const handleExportZip = React.useCallback(async () => {
     setIsPending(true);
     try {
       const fullProject = await getFullProjectHistory(project.id);
       if (!fullProject) throw new Error("Failed to load project history");
+      if ("error" in fullProject) throw new Error(fullProject.error);
+
+      if (!("revisions" in fullProject)) {
+        throw new Error("Invalid project data returned from server");
+      }
 
       const zip = new JSZip();
       const safeProjectName = project.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -424,54 +459,24 @@ export default function ReviewClient({ project, currentRevision: initialRevision
 
     } catch (error) {
       console.error("Full project export failed:", error);
-      alert("Failed to generate full project archive.");
+      toast.error("Export Failed", { description: "Failed to generate full project archive." });
     } finally {
       setIsPending(false);
     }
-  };
+  }, [project, isAdminUser, projectRevisions]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50 text-slate-900">
       
       {/* LEFT SIDEBAR: Revision History */}
-      <div className="w-72 border-r-2 border-slate-300 flex flex-col bg-white shadow-xl z-20">
-        <div className="p-6 border-b-2 border-slate-200 flex items-center justify-between shadow-sm">
-          <h2 className="text-sm font-black uppercase italic tracking-widest flex items-center gap-2 text-slate-800">
-            <History className="h-4 w-4 text-poly-teal-light" /> History
-          </h2>
-        </div>
-        <div className="flex-grow overflow-y-auto p-4 space-y-2 relative">
-          <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4 px-2">
-              Revisions ({projectRevisions.length})
-          </div>
-          {projectRevisions.map((rev: any) => (
-            <button
-              key={rev.id}
-              onClick={() => {
-                setCurrentRevision(rev);
-                setLiveComments(rev.comments || []);
-              }}
-              className={`w-full text-left p-3 rounded-xl border-2 transition-all flex flex-col group ${
-                currentRevision?.id === rev.id 
-                  ? 'bg-poly-teal-light/10 border-poly-teal-light/30 shadow-sm' 
-                  : 'bg-white border-transparent hover:border-slate-200 hover:bg-slate-50 hover:shadow-sm'
-              }`}
-            >
-              <div className="flex justify-between items-center w-full">
-                <span className={`text-xs font-black tracking-widest ${currentRevision?.id === rev.id ? 'text-poly-teal-dark' : 'text-slate-700'}`}>
-                  REV {rev.versionNumber}
-                </span>
-                {currentRevision?.id === rev.id && (
-                  <span className="w-2 h-2 rounded-full bg-poly-teal-light animate-pulse shadow-[0_0_8px_rgba(92,184,146,0.8)]" />
-                )}
-              </div>
-              <span className={`text-[10px] font-bold mt-1 ${currentRevision?.id === rev.id ? 'text-poly-teal-dark/70' : 'text-slate-400 group-hover:text-slate-500'}`}>
-                {new Date(rev.createdAt).toLocaleDateString()} at {new Date(rev.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <HistorySidebar 
+        projectRevisions={projectRevisions}
+        currentRevision={currentRevision}
+        onSelectRevision={React.useCallback((rev: RevisionWithComments) => {
+          setCurrentRevision(rev);
+          setLiveComments(rev.comments || []);
+        }, [])}
+      />
 
       {/* CENTER: 3D Viewer */}
       <div className="flex-grow relative h-full">
@@ -495,8 +500,8 @@ export default function ReviewClient({ project, currentRevision: initialRevision
             key={currentRevision.id}
             url={currentRevision?.fileUrl}
             preloadUrls={getAdjacentRevisionUrls(currentRevision, projectRevisions)}
-            comments={liveComments}
-            onPointSelected={setSelectedPoint}
+            comments={sortedLiveComments}
+            onPointSelected={handlePointSelected}
             selectedPoint={selectedPoint}
             cameraTarget={cameraTarget}
           />
@@ -524,237 +529,27 @@ export default function ReviewClient({ project, currentRevision: initialRevision
         )}
       </div>
 
-      <div className="w-96 border-l-2 border-slate-300 flex flex-col bg-white shadow-xl z-20">
-        <div className="p-6 border-b-2 border-slate-200 flex items-center justify-between shadow-sm">
-          <h2 className="text-sm font-black italic tracking-widest flex items-center gap-2 text-slate-800">
-            <MessageSquare className="h-4 w-4 text-poly-teal-light" /> Discussion
-          </h2>
-          {isAdminUser && (
-            <button
-              onClick={handleExportZip}
-              disabled={isPending}
-              className="text-slate-400 hover:text-poly-teal-dark transition-colors flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest disabled:opacity-50"
-              title="Export Discussion & STL Archive"
-            >
-              {isPending ? <Clock className="h-4 w-4 animate-spin" /> : <FileArchive className="h-4 w-4" />} Export .ZIP
-            </button>
-          )}
-        </div>
-
-        <div className="flex-grow overflow-y-auto p-4 space-y-2 flex flex-col">
-          {liveComments?.map((comment: any, index: number) => {
-            const isMe = comment.authorName === authorName;
-            
-            return (
-              <div key={comment.id} className={`flex w-full animate-in fade-in slide-in-from-bottom-2 group/comment border-b border-slate-200/60 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                <div className={`flex flex-col max-w-[95%] ${isMe ? 'items-end' : 'items-start'}`}>
-                  
-                  {/* Inline Message Body */}
-                  <div className={`relative flex items-start gap-1.5 text-xs outline-none leading-relaxed text-left break-words w-full ${isMe ? 'flex-row-reverse text-right' : 'flex-row text-left'}`}>
-                      <div className={`font-black tracking-wider whitespace-nowrap pt-0.5 ${comment.authorName === 'Admin' ? 'text-poly-teal-dark' : isMe ? 'text-poly-indigo' : 'text-slate-500'}`}>
-                        {comment.x !== null && (
-                          <span className="inline-flex bg-poly-indigo text-white w-3.5 h-3.5 rounded-full items-center justify-center text-[7px] mr-1 align-text-top mt-0.5">
-                            {index + 1}
-                          </span>
-                        )}
-                        {comment.authorName}:
-                      </div>
-                      <div className={`font-medium whitespace-pre-wrap ${isMe ? 'text-slate-800' : 'text-slate-600'}`}>
-                        {comment.content}
-                      </div>
-
-                    {comment.x !== null && (
-                      <button 
-                        onClick={() => setCameraTarget({ x: comment.x, y: comment.y, z: comment.z })}
-                        className="text-poly-teal-dark bg-white border border-slate-200 rounded-full p-1 shadow-sm hover:text-white hover:bg-poly-teal-dark hover:scale-110 opacity-0 group-hover/comment:opacity-100 transition-all ml-1 flex-shrink-0"
-                        title={`Fly to Pin at [${comment.x.toFixed(1)}, ${comment.y.toFixed(1)}, ${comment.z.toFixed(1)}]`}
-                      >
-                        <MapPin className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* Media Metadata */}
-                  <div className={`flex flex-col gap-1.5 mt-1 ${isMe ? 'items-end' : 'items-start'}`}>
-                    {comment.snapshotUrl && (
-                      <div 
-                        className="cursor-zoom-in relative group/media inline-block"
-                        onClick={() => setSelectedMedia({ url: comment.snapshotUrl, type: 'snapshot' })}
-                      >
-                         <img 
-                              src={comment.snapshotUrl} 
-                              alt="Visual Snapshot" 
-                              className="w-48 rounded-md border border-slate-200 transition-opacity shadow-sm group-hover/media:opacity-90"
-                          />
-                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center rounded-md">
-                              <ZoomIn className="text-white w-6 h-6 shadow-sm" />
-                          </div>
-                      </div>
-                    )}
-                    
-                    {comment.attachmentUrl && (
-                      <div className="mt-1">
-                        {comment.attachmentUrl.match(/\.(jpeg|jpg|png|gif)$/i) ? (
-                          <div 
-                            className="cursor-zoom-in relative group/media inline-block"
-                            onClick={() => setSelectedMedia({ url: comment.attachmentUrl, type: 'image', name: comment.attachmentName })}
-                          >
-                             <img 
-                                src={comment.attachmentUrl} 
-                                alt={comment.attachmentName || "Attached Image"} 
-                                className="w-48 rounded-md border border-slate-200 transition-opacity shadow-sm group-hover/media:opacity-90"
-                             />
-                             <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center rounded-md">
-                                 <ZoomIn className="text-white w-6 h-6 shadow-sm" />
-                             </div>
-                          </div>
-                        ) : (
-                          <div 
-                            className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-poly-teal-light/5 hover:border-poly-teal-light/30 transition-colors shadow-sm max-w-xs"
-                            onClick={() => setSelectedMedia({ url: comment.attachmentUrl, type: 'document', name: comment.attachmentName })}
-                          >
-                            <FileText className="w-5 h-5 text-poly-indigo flex-shrink-0" />
-                            <span className="text-xs font-medium text-slate-700 truncate" title={comment.attachmentName}>
-                              {comment.attachmentName || "Document"}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <span className="text-[9px] text-slate-400 font-medium">
-                      {comment.createdAt ? formatTime(comment.createdAt) : "Pending"}
-                    </span>
-                  </div>
-
-                </div>
-              </div>
-            );
-          })}
-          {liveComments?.length === 0 && (
-            <div className="h-full flex flex-col items-center justify-center opacity-30 text-center px-12">
-              <MessageSquare className="h-12 w-12 mb-4" />
-              <p className="text-[10px] font-black tracking-[0.2em]">Zero Discussion Activity</p>
-              <p className="text-[8px] font-bold mt-2">Initiate the feedback loop by posting a comment below.</p>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="p-6 border-t-2 border-slate-200 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
-          <form className="relative space-y-3" onSubmit={handleSubmit}>
-            
-            {snapshotPreview && (
-              <div className="relative inline-block animate-in fade-in slide-in-from-bottom-2">
-                  <div className="text-[10px] font-black tracking-widest text-slate-500 mb-1 flex items-center gap-1">
-                      <Camera className="w-3 h-3" /> Staged Snapshot
-                  </div>
-                  <div className="relative w-32 rounded-lg border-2 border-poly-teal-light overflow-hidden shadow-sm">
-                      <img src={snapshotPreview} alt="Staged Snapshot" className="w-full h-auto object-cover" />
-                      <button 
-                          type="button" 
-                          onClick={removeSnapshot}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 hover:scale-110 transition-transform"
-                      >
-                          <X className="w-3 h-3" />
-                      </button>
-                  </div>
-              </div>
-            )}
-
-            {attachmentName && (
-               <div className="relative inline-block animate-in fade-in slide-in-from-bottom-2 mt-2">
-                  <div className="text-[10px] font-black tracking-widest text-slate-500 mb-1 flex items-center gap-1">
-                      <Paperclip className="w-3 h-3" /> Staged Attachment
-                  </div>
-                  <div className="relative flex items-center gap-2 bg-slate-50 border-2 border-poly-indigo rounded-lg p-2 pr-8 shadow-sm">
-                      {attachmentName.match(/\.(jpeg|jpg|png|gif)$/i) ? (
-                         <ImageIcon className="w-4 h-4 text-poly-indigo" />
-                      ) : (
-                         <FileText className="w-4 h-4 text-poly-indigo" />
-                      )}
-                      <span className="text-xs font-medium text-slate-700 truncate max-w-[150px]">
-                         {attachmentName}
-                      </span>
-                      <button 
-                          type="button" 
-                          onClick={removeAttachment}
-                          className="absolute right-2 bg-red-500 text-white rounded-full p-0.5 hover:scale-110 transition-transform"
-                      >
-                          <X className="w-3 h-3" />
-                      </button>
-                  </div>
-               </div>
-            )}
-
-            <div className="flex justify-between items-center px-1">
-                {(selectedPoint || snapshotFile) ? (
-                    <div className="flex gap-2">
-                        {selectedPoint && (
-                            <div className="bg-poly-indigo text-white text-[10px] font-black tracking-widest px-2 py-1 rounded-md shadow-sm flex items-center gap-1">
-                            <MapPin className="h-3 w-3" /> Pin Attached
-                            <button type="button" onClick={() => setSelectedPoint(null)} className="ml-1 hover:text-red-300">×</button>
-                            </div>
-                        )}
-                        {snapshotFile && (
-                            <div className="bg-slate-800 text-white text-[10px] font-black tracking-widest px-2 py-1 rounded-md shadow-sm flex items-center gap-1">
-                            <Camera className="h-3 w-3" /> Snapshot
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="text-[10px] uppercase font-bold text-slate-400 italic tracking-widest">
-                        Drafting Feedback...
-                    </div>
-                )}
-
-                <div className="flex gap-2">
-                  <button 
-                      type="button" 
-                      onClick={captureSnapshot}
-                      disabled={isPending}
-                      className="text-[10px] font-black tracking-widest text-poly-teal-dark hover:text-poly-teal-light transition-colors flex items-center gap-1 px-2 py-1 border border-transparent hover:border-poly-teal-light/20 rounded-md bg-poly-teal-light/5 hover:bg-poly-teal-light/10"
-                      title="Capture what is currently visible in the 3D Viewer"
-                  >
-                      <Camera className="w-3 h-3" /> Attach Snapshot
-                  </button>
-                  
-                  <label className="text-[10px] font-black tracking-widest text-poly-indigo hover:text-poly-indigo/70 transition-colors flex items-center gap-1 px-2 py-1 border border-transparent hover:border-poly-indigo/20 rounded-md bg-poly-indigo/5 hover:bg-poly-indigo/10 cursor-pointer">
-                      <Paperclip className="w-3 h-3" /> Add File
-                      <input 
-                          type="file" 
-                          className="hidden" 
-                          accept=".pdf,.docx,.doc,image/png,image/jpeg,image/jpg" 
-                          onChange={handleAttachmentSelect}
-                          disabled={isPending}
-                      />
-                  </label>
-                </div>
-            </div>
-
-            <div className="relative">
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                disabled={isPending}
-                placeholder={selectedPoint ? "Describe the pinned location..." : "Your feedback..."}
-                className={`w-full bg-slate-50 border-2 p-4 pb-12 text-xs font-medium text-slate-800 focus:ring-2 outline-none min-h-[100px] resize-none disabled:opacity-50 placeholder:opacity-40 rounded-xl shadow-inner transition-all ${
-                  selectedPoint 
-                    ? "border-poly-indigo focus:ring-poly-indigo focus:border-poly-indigo" 
-                    : "border-slate-300 focus:ring-poly-teal-light focus:border-poly-teal-light"
-                }`}
-              />
-              <button
-                type="submit"
-                disabled={isPending || !comment.trim()}
-                className="absolute bottom-4 right-4 text-poly-teal-light p-2 disabled:opacity-50 hover:scale-110 hover:text-poly-teal-dark transition-all bg-white rounded-lg shadow-sm border border-slate-100 disabled:shadow-none disabled:bg-transparent disabled:border-transparent"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            </div>
-          </form>
-        </div>
-      </div >
+      <DiscussionSidebar
+        isAdminUser={isAdminUser}
+        isPending={isPending}
+        liveComments={sortedLiveComments}
+        authorName={authorName}
+        snapshotPreview={snapshotPreview}
+        snapshotFile={snapshotFile}
+        attachmentName={attachmentName}
+        selectedPoint={selectedPoint}
+        comment={comment}
+        setComment={setComment}
+        handleSubmit={handleSubmit}
+        handleExportZip={handleExportZip}
+        setCameraTarget={setCameraTarget}
+        setSelectedMedia={setSelectedMedia as any}
+        removeSnapshot={removeSnapshot}
+        removeAttachment={removeAttachment}
+        setSelectedPoint={setSelectedPoint as any}
+        captureSnapshot={captureSnapshot}
+        handleAttachmentSelect={handleAttachmentSelect}
+      />
 
       {/* Media Viewer Modal */}
       {selectedMedia && (
