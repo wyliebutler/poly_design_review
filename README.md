@@ -7,6 +7,7 @@ The Polyunity Design Portal is a real-time, interactive 3D STL viewer and design
 ## Features
 - **Real-Time 3D Rendering**: Upload and instantly visualize `.stl` design files directly in the browser.
 - **Iterative Version Control**: Maintain multiple revisions of a design under a unified project framework.
+- **Visual Diff Viewer**: Dynamically overlay consecutive revisions in 3D to rapidly spot changes (Additions = Green, Deletions = Red, Unchanged = Yellow).
 - **Pinned 3D Feedback**: Click directly onto the 3D model to drop a pin and leave precise, localized feedback.
 - **Live Server-Sent Events**: Discussion threads and version histories sync across all viewers in real-time without needing a manual refresh.
 - **Snapshots & Attachments**: Attach 2D camera snapshots and reference files directly to feedback comments.

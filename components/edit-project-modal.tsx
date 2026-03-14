@@ -9,6 +9,7 @@ interface EditProjectModalProps {
     id: string;
     name: string;
     description: string | null;
+    notificationEmail: string | null;
   };
 }
 
@@ -79,6 +80,19 @@ export default function EditProjectModal({ project }: EditProjectModalProps) {
                   defaultValue={project.description || ""}
                   placeholder="Design specifications and requirements..."
                   className="w-full bg-slate-50 border border-slate-200 p-4 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-poly-teal-light outline-none h-24 resize-none rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black tracking-[0.2em] text-slate-500 mb-2 italic">
+                  Notification Email (Optional)
+                </label>
+                <input
+                  type="email"
+                  name="notificationEmail"
+                  defaultValue={project.notificationEmail || ""}
+                  placeholder="staff@polyunity.com"
+                  className="w-full bg-slate-50 border border-slate-200 p-4 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-poly-teal-light outline-none rounded-xl"
                 />
               </div>
 

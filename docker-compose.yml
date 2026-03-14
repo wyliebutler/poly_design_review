@@ -19,6 +19,8 @@ services:
     restart: always
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
       DATABASE_URL: "postgresql://design_user:design_password@db:5432/design_review"
       AUTH_SECRET: "your-super-secret-key-for-v2"

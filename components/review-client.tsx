@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { MessageSquare, Clock, Send, Plus, Download, FileArchive, MapPin, Camera, X, History, Paperclip, FileText, Image as ImageIcon, ZoomIn } from "lucide-react";
 import { useSession } from "next-auth/react";
 import JSZip from "jszip";
-import { postComment, uploadRevision, getComments, getFullProjectHistory, editComment, deleteComment } from "@/lib/actions";
+import { postComment, uploadRevision, getComments, getFullProjectHistory, editComment, deleteComment, subscribeToProject } from "@/lib/actions";
 import type { ProjectWithRevisions, RevisionWithComments } from "@/lib/actions";
 import type { Comment } from "@prisma/client";
 import AuthorNameModal from "@/components/author-name-modal";
@@ -42,6 +42,16 @@ const getAdjacentRevisionUrls = (currentRev: RevisionWithComments, allRevisions:
   if (currentIndex < allRevisions.length - 1) urlsToPreload.push(allRevisions[currentIndex + 1].fileUrl);
   
   return urlsToPreload;
+};
+
+// Helper to get previous revision's URL for diffing
+const getPreviousRevisionUrl = (currentRev: RevisionWithComments, allRevisions: RevisionWithComments[]) => {
+  if (!currentRev || !allRevisions || allRevisions.length === 0) return null;
+  // allRevisions is assumed to be sorted with newest first, based on HistorySidebar usage, 
+  // so the previous revision (older) is at index + 1.
+  const currentIndex = allRevisions.findIndex(r => r.id === currentRev.id);
+  if (currentIndex === -1 || currentIndex >= allRevisions.length - 1) return null;
+  return allRevisions[currentIndex + 1].fileUrl;
 };
 
 export default function ReviewClient({ project, currentRevision: initialRevision }: ReviewClientProps) {
@@ -155,9 +165,19 @@ export default function ReviewClient({ project, currentRevision: initialRevision
   }, [project?.id]);
 
 
-  const handleNameConfirm = (name: string) => {
-    setAuthorName(name);
-    localStorage.setItem("portal_author_name", name);
+  const handleNameConfirm = async (data: { name: string; email: string; notifyOnRevisions: boolean; notifyOnComments: boolean }) => {
+    setAuthorName(data.name);
+    localStorage.setItem("portal_author_name", data.name);
+    
+    if (data.email) {
+      localStorage.setItem("portal_author_email", data.email);
+      try {
+        await subscribeToProject(project.id, data);
+      } catch (err) {
+        console.error("Failed to subscribe to project:", err);
+      }
+    }
+    
     setShowNameModal(false);
   };
 
@@ -536,6 +556,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
           <StlViewer 
             key={currentRevision.id}
             url={currentRevision?.fileUrl}
+            diffUrl={getPreviousRevisionUrl(currentRevision, projectRevisions) || undefined}
             preloadUrls={getAdjacentRevisionUrls(currentRevision, projectRevisions)}
             comments={sortedLiveComments}
             onPointSelected={handlePointSelected}

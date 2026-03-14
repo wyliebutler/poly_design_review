@@ -5,7 +5,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Stage, Html, Line, PerspectiveCamera, Bounds } from "@react-three/drei";
 import { Suspense, useState, useMemo, useRef, useEffect, memo } from "react";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box } from "lucide-react";
+import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box, Layers } from "lucide-react";
 import * as THREE from "three";
 import type { Comment } from "@prisma/client";
 import { ErrorBoundary } from "./error-boundary";
@@ -19,6 +19,8 @@ function Model({
   showSlice,
   sliceAmount,
   sliceAxis,
+  isDiffMode,
+  diffColor,
   onPointSelected,
   onMeasurePointAdded,
   onSnapPointChange
@@ -31,6 +33,9 @@ function Model({
   showSlice: boolean,
   sliceAmount: number,
   sliceAxis: 'x' | 'y' | 'z',
+  sliceAxis: 'x' | 'y' | 'z',
+  isDiffMode?: boolean,
+  diffColor?: string,
   onPointSelected?: (point: THREE.Vector3) => void,
   onMeasurePointAdded?: (point: THREE.Vector3) => void,
   onSnapPointChange?: (point: { position: THREE.Vector3, normal: THREE.Vector3, distance: number } | null) => void
@@ -243,12 +248,16 @@ function Model({
       }}
     >
       <meshStandardMaterial 
-        color="#5CB892" 
+        color={isDiffMode ? diffColor : "#5CB892"} 
         roughness={0.4} 
         metalness={0.5} 
         clippingPlanes={showSlice ? clipPlanes : []}
         clipShadows={true}
         side={showSlice ? THREE.DoubleSide : THREE.FrontSide}
+        transparent={isDiffMode}
+        opacity={isDiffMode ? 0.8 : 1}
+        depthWrite={!isDiffMode}
+        blending={isDiffMode ? THREE.AdditiveBlending : THREE.NormalBlending}
       />
     </mesh>
   );
@@ -318,6 +327,7 @@ function FallbackLoader() {
 
 const StlViewerComponent = ({ 
   url, 
+  diffUrl,
   preloadUrls = [],
   comments = [], 
   onPointSelected,
@@ -325,6 +335,7 @@ const StlViewerComponent = ({
   cameraTarget = null
 }: { 
   url: string,
+  diffUrl?: string,
   preloadUrls?: string[],
   comments?: Comment[],
   onPointSelected?: (point: { x: number, y: number, z: number } | null) => void,
@@ -333,6 +344,7 @@ const StlViewerComponent = ({
 }) => {
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [showSlice, setShowSlice] = useState(false);
+  const [diffMode, setDiffMode] = useState(false);
   const [sliceAmount, setSliceAmount] = useState(100);
   const [sliceAxis, setSliceAxis] = useState<'x' | 'y' | 'z'>('y');
   const [showHelp, setShowHelp] = useState(false);
@@ -346,7 +358,12 @@ const StlViewerComponent = ({
 
   useEffect(() => {
     // 1. Preload new adjacent URLs
-    preloadUrls.forEach((preloadUrl) => {
+    const urlsToPreload = [...preloadUrls];
+    if (diffUrl && !urlsToPreload.includes(diffUrl)) {
+      urlsToPreload.push(diffUrl);
+    }
+
+    urlsToPreload.forEach((preloadUrl) => {
       useLoader.preload(STLLoader, preloadUrl);
     });
 
@@ -355,13 +372,13 @@ const StlViewerComponent = ({
     if (THREE.Cache.files) {
          Object.keys(THREE.Cache.files).forEach((cachedUrl) => {
              // Don't evict the currently active URL, and don't evict the adjacent ones
-             if (cachedUrl !== url && !preloadUrls.includes(cachedUrl)) {
+             if (cachedUrl !== url && !urlsToPreload.includes(cachedUrl)) {
                  THREE.Cache.remove(cachedUrl);
              }
          });
     }
 
-  }, [preloadUrls, url]);
+  }, [preloadUrls, url, diffUrl]);
 
   const handleMeasurePointAdded = (point: THREE.Vector3) => {
     setMeasurePoints((prev) => {
@@ -381,14 +398,16 @@ const StlViewerComponent = ({
 
   if (!url) return null;
 
+  const bgStyle = diffMode ? 'bg-slate-900' : 'bg-slate-100';
+
   return (
-    <div className={`w-full h-full bg-slate-100 relative group ${pinMode || showMeasurements ? 'cursor-crosshair' : ''}`}>
+    <div className={`w-full h-full ${bgStyle} relative group ${pinMode || showMeasurements ? 'cursor-crosshair' : ''} transition-colors duration-500`}>
       <ErrorBoundary>
         <Canvas shadows gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }} camera={{ fov: 35 }}>
-          <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} intensity={1} castShadow />
+          <ambientLight intensity={diffMode ? 0.8 : 0.5} />
+        <pointLight position={[10, 10, 10]} intensity={diffMode ? 1.5 : 1} castShadow />
         <Suspense fallback={<FallbackLoader />}>
-          <Stage environment="city" intensity={0.5} shadows={{ type: "contact", opacity: 0.5, blur: 2 }} adjustCamera={false}>
+          <Stage environment={diffMode ? "city" : "city"} intensity={0.5} shadows={{ type: "contact", opacity: 0.5, blur: 2 }} adjustCamera={false}>
               <Model 
               url={url} 
               onLoad={(dim, vol, area) => {
@@ -402,10 +421,26 @@ const StlViewerComponent = ({
               showSlice={showSlice}
               sliceAmount={sliceAmount}
               sliceAxis={sliceAxis}
+              isDiffMode={diffMode}
+              diffColor="#00ff00" // Green for additions (new model)
               onPointSelected={(p) => onPointSelected?.({ x: p.x, y: p.y, z: p.z })}
               onMeasurePointAdded={handleMeasurePointAdded}
               onSnapPointChange={setSnapInfo}
             />
+
+            {diffMode && diffUrl && (
+              <Model 
+                url={diffUrl}
+                onLoad={() => {}} // Dimensions handled by primary model
+                pinMode={false}
+                showMeasurements={false}
+                showSlice={showSlice}
+                sliceAmount={sliceAmount}
+                sliceAxis={sliceAxis}
+                isDiffMode={true}
+                diffColor="#ff0000" // Red for deletions (old model)
+              />
+            )}
             
             {/* Render Existing Pins */}
             {comments.filter(c => c.x !== null && c.y !== null && c.z !== null).map((comment, idx) => (
@@ -509,6 +544,27 @@ const StlViewerComponent = ({
                 <HelpCircle className="h-4 w-4" />
                 Help
             </button>
+            {diffUrl && (
+              <button
+                  onClick={() => {
+                    setDiffMode(!diffMode);
+                    if (!diffMode) {
+                      setPinMode(false);
+                      setShowMeasurements(false);
+                      setShowSlice(false);
+                    }
+                  }}
+                  className={`p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest ${
+                    diffMode 
+                    ? "bg-slate-900 text-white border-slate-700 hover:bg-slate-800" 
+                    : "bg-white/90 backdrop-blur border-slate-200 text-slate-500 hover:bg-white"
+                  }`}
+                  title="Toggle Visual Overlap Diff"
+              >
+                  <Layers className="h-4 w-4" />
+                  Diff
+              </button>
+            )}
             <button
                 onClick={() => {
                   setPinMode(!pinMode);
@@ -553,6 +609,7 @@ const StlViewerComponent = ({
                   if (!showSlice) {
                     setPinMode(false);
                     setShowMeasurements(false);
+                    // allow diff mode to stay on while slicing to see internal diffs!
                   }
                 }}
                 className={`p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest ${
@@ -579,6 +636,14 @@ const StlViewerComponent = ({
                 <div className="text-poly-indigo flex items-center gap-2 bg-poly-indigo/10 px-2 py-1 rounded">
                   <MapPin className="h-3 w-3" />
                   Click model to drop a pin
+                </div>
+              )}
+              {diffMode && (
+                <div className="text-white flex items-center gap-2 bg-slate-900 px-2 py-1 rounded">
+                  <Layers className="h-3 w-3" />
+                  <span className="text-green-500 mr-1">Green:</span> Additions 
+                  <span className="text-red-500 mx-1">Red:</span> Deletions
+                  <span className="text-yellow-500 ml-1">Yellow:</span> Unchanged
                 </div>
               )}
               {showSlice && (
@@ -720,6 +785,13 @@ const StlViewerComponent = ({
                               <div>
                                   <strong className="block text-slate-800">Cross-Section Slice</strong>
                                   Click "Slice" and use the X/Y/Z buttons to choose an axis, then use the slider to dynamically cut through the model and inspect its interior.
+                              </div>
+                          </li>
+                          <li className="flex gap-3">
+                              <Layers className="h-5 w-5 text-slate-900 shrink-0" />
+                              <div>
+                                  <strong className="block text-slate-900">Diff Viewer</strong>
+                                  If a previous revision exists, click "Diff" to see a visual comparison. <strong className="text-green-600">Green</strong> indicates new geometry, <strong className="text-red-600">Red</strong> indicates deleted geometry, and <strong className="text-yellow-500">Yellow</strong> indicates unchanged, overlapping geometry.
                               </div>
                           </li>
                       </ul>

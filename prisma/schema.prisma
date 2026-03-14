@@ -28,13 +28,15 @@ model Project {
   id            String    @id @default(cuid())
   name          String
   description   String?   @db.Text
-  obfuscatedId  String    @unique @default(uuid())
-  isArchived    Boolean   @default(false)
+  obfuscatedId      String    @unique @default(uuid())
+  isArchived        Boolean   @default(false)
+  notificationEmail String?
   
-  creatorId     String
+  creatorId         String
   creator       User      @relation(fields: [creatorId], references: [id])
   
   revisions     Revision[]
+  subscribers   ProjectSubscriber[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -70,4 +72,21 @@ model Comment {
   attachmentUrl String?   // General file attachment (PDF, DOCX, PNG, JPG)
   attachmentName String?  // Original filename for display
   createdAt     DateTime  @default(now())
+}
+
+model ProjectSubscriber {
+  id                String   @id @default(cuid())
+  projectId         String
+  project           Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  
+  name              String
+  email             String   
+  
+  notifyOnRevisions Boolean  @default(true)
+  notifyOnComments  Boolean  @default(false)
+  
+  unsubscribeToken  String   @unique @default(uuid())
+  createdAt         DateTime @default(now())
+  
+  @@unique([projectId, email])
 }

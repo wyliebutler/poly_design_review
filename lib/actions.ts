@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
+import { sendNewRevisionEmail, sendNewCommentEmail } from "@/lib/email";
 
 import { Prisma } from "@prisma/client";
 import { writeFile, mkdir, unlink } from "node:fs/promises";
@@ -30,6 +31,7 @@ export async function createProject(formData: FormData): Promise<{ error?: strin
 
   const name = formData.get("name") as string;
   const description = formData.get("description") as string;
+  const notificationEmail = (formData.get("notificationEmail") as string) || null;
   const file = formData.get("stlFile") as File;
 
   console.log("[createProject] Starting for file:", file.name, "size:", file.size);
@@ -103,6 +105,7 @@ export async function createProject(formData: FormData): Promise<{ error?: strin
       data: {
         name,
         description,
+        notificationEmail,
         creatorId: user.id,
         revisions: {
           create: {
@@ -136,12 +139,13 @@ export async function updateProject(projectId: string, formData: FormData) {
 
   const name = formData.get("name") as string;
   const description = formData.get("description") as string;
+  const notificationEmail = (formData.get("notificationEmail") as string) || null;
 
   if (!name) throw new Error("Project name is required");
 
   const project = await prisma.project.update({
     where: { id: projectId },
-    data: { name, description },
+    data: { name, description, notificationEmail },
   });
 
   revalidatePath("/dashboard");
@@ -238,7 +242,10 @@ export async function uploadRevision(projectId: string, formData: FormData): Pro
   // Get project to determine next version number
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    include: { revisions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+    include: { 
+      revisions: { orderBy: { versionNumber: "desc" }, take: 1 },
+      subscribers: { where: { notifyOnRevisions: true } }
+    },
   });
 
   if (!project) return { error: "Project not found" };
@@ -290,6 +297,32 @@ export async function uploadRevision(projectId: string, formData: FormData): Pro
         comments: true
       }
     });
+
+    const projectUrl = `${process.env.NEXTAUTH_URL}/review/${project.obfuscatedId}`;
+    
+    // Notify Staff via notificationEmail
+    if (project.notificationEmail) {
+      console.log("[EMAIL DEBUG] Notifying staff at project.notificationEmail:", project.notificationEmail);
+      sendNewRevisionEmail({
+        to: project.notificationEmail,
+        projectName: project.name,
+        projectUrl,
+      });
+    } else {
+      console.log("[EMAIL DEBUG] No project.notificationEmail set.");
+    }
+
+    // Notify subscribed clients
+    console.log(`[EMAIL DEBUG] Notifying ${project.subscribers.length} subscribed clients about new revision.`);
+    for (const sub of project.subscribers) {
+      console.log("[EMAIL DEBUG] Sending revision email to subscriber:", sub.email);
+      sendNewRevisionEmail({
+        to: sub.email,
+        projectName: project.name,
+        projectUrl,
+        unsubscribeUrl: `${process.env.NEXTAUTH_URL}/api/unsubscribe?token=${sub.unsubscribeToken}`
+      });
+    }
 
     revalidatePath("/dashboard");
     revalidatePath(`/review/${project.obfuscatedId}`);
@@ -391,6 +424,50 @@ export async function postComment(formData: FormData): Promise<{ error?: string 
         attachmentName
       },
     });
+
+    // Trigger emails asynchronously
+    prisma.project.findFirst({
+      where: { revisions: { some: { id: revisionId } } },
+      include: { subscribers: { where: { notifyOnComments: true } } }
+    }).then(project => {
+      if (!project) {
+        console.log("[EMAIL DEBUG] Background job failed: Project not found for revision", revisionId);
+        return;
+      }
+      
+      const projectUrl = `${process.env.NEXTAUTH_URL}/review/${project.obfuscatedId}`;
+      console.log(`[EMAIL DEBUG] Found project '${project.name}' with ${project.subscribers.length} subscribers.`);
+      
+      // If client commented, notify staff
+      if (!isAuthorAdmin && project.notificationEmail) {
+        console.log("[EMAIL DEBUG] Client commented. Notifying staff at:", project.notificationEmail);
+        sendNewCommentEmail({
+          to: project.notificationEmail,
+          projectName: project.name,
+          authorName: finalAuthorName || "A Client",
+          commentContent: content,
+          projectUrl
+        });
+      } else if (!isAuthorAdmin) {
+        console.log("[EMAIL DEBUG] Client commented, but no notificationEmail is set on the project.");
+      }
+
+      // If admin/staff commented, notify subscribed clients
+      if (isAuthorAdmin) {
+        console.log(`[EMAIL DEBUG] Admin commented. Notifying ${project.subscribers.length} subscribed clients.`);
+        for (const sub of project.subscribers) {
+           console.log("[EMAIL DEBUG] Sending comment email to subscriber:", sub.email);
+           sendNewCommentEmail({
+             to: sub.email,
+             projectName: project.name,
+             authorName: finalAuthorName || "Admin",
+             commentContent: content,
+             projectUrl,
+             unsubscribeUrl: `${process.env.NEXTAUTH_URL}/api/unsubscribe?token=${sub.unsubscribeToken}`
+           });
+        }
+      }
+    }).catch(e => console.error("[EMAIL ERROR] Error triggering comment emails:", e));
 
     return comment;
   } catch (err: any) {
@@ -510,3 +587,34 @@ export async function deleteComment(commentId: string, clientAuthorName: string)
     return { error: "Failed to delete comment" };
   }
 }
+
+export async function subscribeToProject(projectId: string, data: { name: string; email: string; notifyOnRevisions: boolean; notifyOnComments: boolean }) {
+  try {
+    const subscriber = await prisma.projectSubscriber.upsert({
+      where: {
+        projectId_email: {
+          projectId,
+          email: data.email
+        }
+      },
+      update: {
+        name: data.name,
+        notifyOnRevisions: data.notifyOnRevisions,
+        notifyOnComments: data.notifyOnComments,
+      },
+      create: {
+        projectId,
+        name: data.name,
+        email: data.email,
+        notifyOnRevisions: data.notifyOnRevisions,
+        notifyOnComments: data.notifyOnComments,
+      }
+    });
+    
+    return { success: true, subscriber };
+  } catch (error) {
+    console.error("Failed to subscribe to project:", error);
+    return { error: "Failed to subscribe" };
+  }
+}
+
