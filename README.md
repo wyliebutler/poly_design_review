@@ -47,6 +47,10 @@ Create your primary `.env` config file by copying the example or generating the 
 AUTH_SECRET="some-secure-random-string" # Essential for NextAuth
 ADMIN_PASSWORD="my-secure-password" # Sets the dashboard access password
 NODE_ENV="production"
+
+# Resend Email Configuration
+RESEND_API_KEY="re_123456789_abcdefg" # Generated from the Resend Dashboard
+RESEND_FROM_EMAIL="notifications@yourdomain.com" # A verified domain sending address
 ```
 
 *Note: The `DATABASE_URL` is automatically provided by `docker-compose.yml` to securely connect the Next.js container to the PostgreSQL container, so you do not need to set it in `.env`.*
