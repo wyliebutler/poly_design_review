@@ -13,8 +13,8 @@ const config: Config = {
         foreground: "var(--foreground)",
         poly: {
           teal: {
-            dark: "#1B6378",
-            light: "#71C6AC",
+            dark: "var(--color-secondary, #1B6378)",
+            light: "var(--color-primary, #71C6AC)",
           },
           tan: "#FFE19F",
           indigo: "#18227C",

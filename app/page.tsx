@@ -1,7 +1,16 @@
 import { Hammer, ArrowRight, Shield, MessageSquare, Box } from "lucide-react";
 import Link from "next/link";
+import { getSettings } from "@/lib/settings-actions";
 
-export default function Home() {
+export default async function Home() {
+  const settings = await getSettings();
+  
+  // Try to split the appName into two lines nicely like it was originally (Design / Review Portal)
+  // Or just display it nicely. If it's a long string, maybe split on the first space.
+  const nameParts = settings.appName.split(" ");
+  const firstWord = nameParts.length > 1 ? nameParts[0] : settings.appName;
+  const restOfName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "";
+
   return (
     <div className="relative isolate pt-14">
       {/* Background Grid */}
@@ -16,8 +25,8 @@ export default function Home() {
           </div>
 
           <h1 className="text-4xl font-black tracking-tighter sm:text-7xl uppercase italic leading-none text-slate-900">
-            Design <br />
-            <span className="text-poly-teal-dark">Review</span> Portal
+            {firstWord} <br />
+            {restOfName && <span className="text-poly-teal-dark">{restOfName}</span>}
           </h1>
 
           <p className="mt-8 text-lg leading-8 text-slate-500 font-medium max-w-lg mx-auto">

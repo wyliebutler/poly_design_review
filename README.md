@@ -16,7 +16,7 @@ The Polyunity Design Portal is a real-time, interactive 3D STL viewer and design
 
 ## Tech Stack
 - **Framework**: Next.js 15 (App Router, Server Actions)
-- **Database ORM**: Prisma (SQLite)
+- **Database ORM**: Prisma (PostgreSQL via Docker)
 - **3D Engine**: Three.js (`@react-three/fiber` / `@react-three/drei`)
 - **Real-Time Pipeline**: Server-Sent Events (SSE) via native API Route Handlers
 
@@ -24,7 +24,7 @@ The Polyunity Design Portal is a real-time, interactive 3D STL viewer and design
 
 ## Deployment Instructions (Docker Compose)
 
-The application relies heavily on Docker and Docker Compose for a simplified, sandboxed deployment. The persistent database, file uploads, and Next.js instance are contained neatly together.
+The application relies heavily on Docker and Docker Compose for a simplified, sandboxed deployment. The persistent PostgreSQL database, file uploads, and Next.js instance are contained neatly together.
 
 ### Prerequisites
 - Install [Docker](https://docs.docker.com/get-docker/)
@@ -40,15 +40,16 @@ cd poly_design_review
 ```
 
 ### 2. Environment Variables
-Create your primary `.env` config file by copying the example or generating the secret keys manually. For the SQLite docker deployment to work out of the box, `DATABASE_URL` should map to the Docker container's internal path.
+Create your primary `.env` config file by copying the example or generating the secret keys manually. This setup assumes you will be using the bundled `postgres` container.
 
 ```bash
 # Example .env configuration
-DATABASE_URL="file:/app/prisma/dev.db"
 AUTH_SECRET="some-secure-random-string" # Essential for NextAuth
 ADMIN_PASSWORD="my-secure-password" # Sets the dashboard access password
 NODE_ENV="production"
 ```
+
+*Note: The `DATABASE_URL` is automatically provided by `docker-compose.yml` to securely connect the Next.js container to the PostgreSQL container, so you do not need to set it in `.env`.*
 
 ### 3. Spin Up Docker Containers
 Run the Docker Compose `up` command to build the image and launch the background containers. 
@@ -67,7 +68,7 @@ Once completed, the portal should be accessible via port `3000` on your host mac
 When a new feature or bug fix has been pushed to the GitHub repository, updating the live application implies a graceful, seamless rebuild.
 
 1. **Pull the Latest Code**
-   Navigate to your local repository directory and pull the newest changes from the main branch:
+   Navigate to your local repository directory and pull the newest changes from the `main` branch:
    ```bash
    git pull origin main
    ```
@@ -81,5 +82,5 @@ When a new feature or bug fix has been pushed to the GitHub repository, updating
 3. **(Optional) Clean Up Disk Space**
    Docker does not unilaterally delete your old unused images when creating a new build. To free up storage space on the deployment server over time, routinely prune dangling layers:
    ```bash
-   docker image prune -f
+   docker system prune -f
    ```

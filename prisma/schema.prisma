@@ -90,3 +90,10 @@ model ProjectSubscriber {
   
   @@unique([projectId, email])
 }
+
+// Global configuration values for white-labeling
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
