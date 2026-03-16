@@ -44,7 +44,7 @@ export async function getSettings(): Promise<AppSettings> {
 export async function updateSettings(formData: FormData): Promise<{ error?: string; success?: boolean }> {
   const session = await auth();
   
-  if (!session?.user || session.user.role !== "ADMIN") {
+  if (!session?.user || (session.user as any).role !== "ADMIN") {
     return { error: "Unauthorized. Only admins can update settings." };
   }
 
