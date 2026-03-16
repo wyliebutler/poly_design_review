@@ -22,46 +22,44 @@ The White-Label Design Portal is a real-time, interactive 3D STL viewer and desi
 
 ---
 
-## Deployment Instructions (Docker Compose)
+## Deployment Instructions (Docker)
 
-The application relies heavily on Docker and Docker Compose for a simplified, sandboxed deployment. The persistent PostgreSQL database, file uploads, and Next.js instance are contained neatly together.
+The application relies on Docker to provide a simplified, sandboxed deployment. The persistent PostgreSQL database, file uploads, and Next.js instance are contained neatly together using `docker-compose.yml`.
 
 ### Prerequisites
 - Install [Docker](https://docs.docker.com/get-docker/)
 - Install [Docker Compose](https://docs.docker.com/compose/install/)
-- Install [Git](https://git-scm.com/)
+- A GitHub Personal Access Token (PAT) with `read:packages` permissions.
 
-### 1. Initial Installation
-Clone the repository to your host server:
+### 1. Authenticate with GitHub Container Registry
+Since the Docker image is hosted privately on GitHub, you must log in:
 
 ```bash
-git clone https://github.com/wyliebutler/poly_design_review.git
-cd poly_design_review
+docker login ghcr.io -u YOUR_GITHUB_USERNAME
+# When prompted for a password, paste your Personal Access Token (PAT)
 ```
 
-### 2. Environment Variables
-Create your primary `.env` config file by copying the example or generating the secret keys manually. This setup assumes you will be using the bundled `postgres` container.
+### 2. Environment Setup
+Create a `.env` file and `docker-compose.yml` on your server. 
 
 ```bash
-# Example .env configuration
-AUTH_SECRET="some-secure-random-string" # Essential for NextAuth
-ADMIN_PASSWORD="my-secure-password" # Sets the dashboard access password
+# .env
+AUTH_SECRET="some-secure-random-string"
+ADMIN_PASSWORD="my-secure-password"
 NODE_ENV="production"
-
-# Resend Email Configuration
-RESEND_API_KEY="re_123456789_abcdefg" # Generated from the Resend Dashboard
-RESEND_FROM_EMAIL="notifications@yourdomain.com" # A verified domain sending address
+RESEND_API_KEY="re_123456789_abcdefg"
+RESEND_FROM_EMAIL="notifications@yourdomain.com"
 ```
 
-*Note: The `DATABASE_URL` is automatically provided by `docker-compose.yml` to securely connect the Next.js container to the PostgreSQL container, so you do not need to set it in `.env`.*
+*Note: The `DATABASE_URL` is automatically provided by `docker-compose.yml`.*
 
 ### 3. Spin Up Docker Containers
-Run the Docker Compose `up` command to build the image and launch the background containers. 
+If you have the `docker-compose.yml` file, simply pull and start the containers. The Next.js container will automatically verify and initialize the database schema.
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
-*Note: The `--build` flag forces Docker to assemble the Next.js production build before turning on the traffic listener.*
 
 Once completed, the portal should be accessible via port `3000` on your host machine.
 
@@ -69,22 +67,21 @@ Once completed, the portal should be accessible via port `3000` on your host mac
 
 ## How to Update the Application
 
-When a new feature or bug fix has been pushed to the GitHub repository, updating the live application implies a graceful, seamless rebuild.
+When a new feature or bug fix is released, updating the live application implies pulling the newest image from the registry and restarting.
 
-1. **Pull the Latest Code**
-   Navigate to your local repository directory and pull the newest changes from the `main` branch:
+1. **Pull the Latest Image**
    ```bash
-   git pull origin main
+   docker compose pull app
    ```
 
-2. **Rebuild the Docker Image**
-   Restart Docker Compose with the `--build` flag. Docker will automatically turn off the old container, re-install NPM packages if needed, compile the newest Next.js assets, apply pending database Prisma migrations, and safely restart the app.
+2. **Recreate the Containers**
+   Docker will automatically recreate the `app` container using the new image, run the database migrations securely, and safely restart the app with minimal downtime.
    ```bash
-   docker compose up -d --build
+   docker compose up -d
    ```
 
 3. **(Optional) Clean Up Disk Space**
-   Docker does not unilaterally delete your old unused images when creating a new build. To free up storage space on the deployment server over time, routinely prune dangling layers:
+   Docker does not unilaterally delete your old unused images when downloading a new version. To free up storage space on the deployment server over time, routinely prune dangling images:
    ```bash
    docker system prune -f
    ```
