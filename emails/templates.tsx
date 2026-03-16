@@ -86,7 +86,7 @@ interface NewRevisionEmailProps {
 
 export const NewRevisionEmail = ({
   projectName = "Your Project",
-  projectUrl = "https://design-portal.polyunity.com",
+  projectUrl = "https://design-portal.yourdomain.com",
   unsubscribeUrl,
 }: NewRevisionEmailProps) => {
   return (
@@ -140,7 +140,7 @@ export const NewCommentEmail = ({
   projectName = "Your Project",
   authorName = "A team member",
   commentContent = "Left a comment.",
-  projectUrl = "https://design-portal.polyunity.com",
+  projectUrl = "https://design-portal.yourdomain.com",
   unsubscribeUrl,
 }: NewCommentEmailProps) => {
   return (

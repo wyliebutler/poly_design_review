@@ -33,7 +33,6 @@ function Model({
   showSlice: boolean,
   sliceAmount: number,
   sliceAxis: 'x' | 'y' | 'z',
-  sliceAxis: 'x' | 'y' | 'z',
   isDiffMode?: boolean,
   diffColor?: string,
   onPointSelected?: (point: THREE.Vector3) => void,

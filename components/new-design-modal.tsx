@@ -102,7 +102,7 @@ export default function NewDesignModal() {
                 <input
                   type="email"
                   name="notificationEmail"
-                  placeholder="team@polyunity.com"
+                  placeholder="team@yourdomain.com"
                   className="w-full bg-slate-50 border border-slate-200 p-4 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-poly-teal-light outline-none placeholder:opacity-40 rounded-xl"
                 />
                 <p className="text-[10px] text-slate-500 mt-2 italic">Where should client comments and revision notices be sent?</p>

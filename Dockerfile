@@ -38,4 +38,4 @@ RUN mkdir -p public/uploads && chown -R nextjs:nodejs public/uploads
 USER nextjs
 EXPOSE 3000
 ENV PORT 3000
-CMD ["npm", "start"]
+CMD ["npm", "run", "start:docker"]

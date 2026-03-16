@@ -1,11 +1,12 @@
 {
   "name": "design-portal",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:docker": "npx prisma db push --accept-data-loss && next start",
     "lint": "next lint"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
-# Polyunity Design Portal
+# White-Label Design Portal
 
-The Polyunity Design Portal is a real-time, interactive 3D STL viewer and design review platform. It enables engineers and clients to upload CAD models, track version histories, and collaborate through real-time localized comments directly pinned to the 3D geometry.
+The White-Label Design Portal is a real-time, interactive 3D STL viewer and design review platform. It enables engineers and clients to upload CAD models, track version histories, and collaborate through real-time localized comments directly pinned to the 3D geometry.
 
 ![Main Conversation Window](./docs/screenshot.png)
 
