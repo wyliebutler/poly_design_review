@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus, X, Upload, Loader2 } from "lucide-react";
 import { createProject } from "@/lib/actions";
+import { getSettings } from "@/lib/settings-actions";
 import { extractStlThumbnail } from "./thumbnail-extractor";
 
 export default function NewDesignModal() {
@@ -27,7 +28,8 @@ export default function NewDesignModal() {
 
        setPendingText("Generating Thumbnail...");
        try {
-           const thumbnailFile = await extractStlThumbnail(stlFile);
+           const settings = await getSettings();
+           const thumbnailFile = await extractStlThumbnail(stlFile, settings.modelColor);
            if (thumbnailFile) {
                formData.append("thumbnail", thumbnailFile);
            }

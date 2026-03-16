@@ -8,6 +8,7 @@ export type AppSettings = {
   appName: string;
   primaryColor: string;
   secondaryColor: string;
+  modelColor: string;
   logoUrl: string;
 };
 
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   appName: "Design Review Portal",
   primaryColor: "#71C6AC", // teal-light
   secondaryColor: "#1B6378", // teal-dark
+  modelColor: "#5CB892", // default green
   logoUrl: "",
 };
 
@@ -30,6 +32,7 @@ export async function getSettings(): Promise<AppSettings> {
       appName: settingsMap["appName"] || DEFAULT_SETTINGS.appName,
       primaryColor: settingsMap["primaryColor"] || DEFAULT_SETTINGS.primaryColor,
       secondaryColor: settingsMap["secondaryColor"] || DEFAULT_SETTINGS.secondaryColor,
+      modelColor: settingsMap["modelColor"] || DEFAULT_SETTINGS.modelColor,
       logoUrl: settingsMap["logoUrl"] || DEFAULT_SETTINGS.logoUrl,
     };
   } catch (error) {
@@ -48,6 +51,7 @@ export async function updateSettings(formData: FormData): Promise<{ error?: stri
   const appName = formData.get("appName") as string;
   const primaryColor = formData.get("primaryColor") as string;
   const secondaryColor = formData.get("secondaryColor") as string;
+  const modelColor = formData.get("modelColor") as string;
   const logoUrl = formData.get("logoUrl") as string;
 
   try {
@@ -55,6 +59,7 @@ export async function updateSettings(formData: FormData): Promise<{ error?: stri
       { key: "appName", value: appName || DEFAULT_SETTINGS.appName },
       { key: "primaryColor", value: primaryColor || DEFAULT_SETTINGS.primaryColor },
       { key: "secondaryColor", value: secondaryColor || DEFAULT_SETTINGS.secondaryColor },
+      { key: "modelColor", value: modelColor || DEFAULT_SETTINGS.modelColor },
       { key: "logoUrl", value: logoUrl || "" },
     ];
 

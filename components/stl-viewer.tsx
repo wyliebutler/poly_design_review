@@ -21,6 +21,7 @@ function Model({
   sliceAxis,
   isDiffMode,
   diffColor,
+  modelColor,
   onPointSelected,
   onMeasurePointAdded,
   onSnapPointChange
@@ -35,6 +36,7 @@ function Model({
   sliceAxis: 'x' | 'y' | 'z',
   isDiffMode?: boolean,
   diffColor?: string,
+  modelColor?: string,
   onPointSelected?: (point: THREE.Vector3) => void,
   onMeasurePointAdded?: (point: THREE.Vector3) => void,
   onSnapPointChange?: (point: { position: THREE.Vector3, normal: THREE.Vector3, distance: number } | null) => void
@@ -247,7 +249,7 @@ function Model({
       }}
     >
       <meshStandardMaterial 
-        color={isDiffMode ? diffColor : "#5CB892"} 
+        color={isDiffMode ? diffColor : (modelColor || "#5CB892")} 
         roughness={0.4} 
         metalness={0.5} 
         clippingPlanes={showSlice ? clipPlanes : []}
@@ -331,7 +333,8 @@ const StlViewerComponent = ({
   comments = [], 
   onPointSelected,
   selectedPoint = null,
-  cameraTarget = null
+  cameraTarget = null,
+  modelColor
 }: { 
   url: string,
   diffUrl?: string,
@@ -339,7 +342,8 @@ const StlViewerComponent = ({
   comments?: Comment[],
   onPointSelected?: (point: { x: number, y: number, z: number } | null) => void,
   selectedPoint?: { x: number, y: number, z: number } | null,
-  cameraTarget?: { x: number, y: number, z: number } | null
+  cameraTarget?: { x: number, y: number, z: number } | null,
+  modelColor?: string
 }) => {
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [showSlice, setShowSlice] = useState(false);
@@ -422,6 +426,7 @@ const StlViewerComponent = ({
               sliceAxis={sliceAxis}
               isDiffMode={diffMode}
               diffColor="#00ff00" // Green for additions (new model)
+              modelColor={modelColor}
               onPointSelected={(p) => onPointSelected?.({ x: p.x, y: p.y, z: p.z })}
               onMeasurePointAdded={handleMeasurePointAdded}
               onSnapPointChange={setSnapInfo}

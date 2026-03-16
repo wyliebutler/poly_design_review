@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import ReviewClient from "@/components/review-client";
+import { getSettings } from "@/lib/settings-actions";
 
 export default async function ReviewPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
@@ -33,8 +34,9 @@ export default async function ReviewPage(props: { params: Promise<{ id: string }
 
     const serializedProject = JSON.parse(JSON.stringify(project));
     const serializedRevision = currentRevision ? JSON.parse(JSON.stringify(currentRevision)) : null;
+    const settings = await getSettings();
 
-    return <ReviewClient key={project.id} project={serializedProject} currentRevision={serializedRevision} />;
+    return <ReviewClient key={project.id} project={serializedProject} currentRevision={serializedRevision} modelColor={settings.modelColor} />;
   } catch (error: any) {
     console.error("[V3 FATAL]", error);
     return (

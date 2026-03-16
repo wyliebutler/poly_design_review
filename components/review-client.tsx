@@ -27,6 +27,7 @@ const StlViewer = dynamic(() => import("@/components/stl-viewer"), {
 interface ReviewClientProps {
   project: ProjectWithRevisions;
   currentRevision: RevisionWithComments;
+  modelColor?: string;
 }
 
 // Helper to find adjacent revisions
@@ -54,7 +55,7 @@ const getPreviousRevisionUrl = (currentRev: RevisionWithComments, allRevisions: 
   return allRevisions[currentIndex + 1].fileUrl;
 };
 
-export default function ReviewClient({ project, currentRevision: initialRevision }: ReviewClientProps) {
+export default function ReviewClient({ project, currentRevision: initialRevision, modelColor }: ReviewClientProps) {
   const { data: session } = useSession();
   const isAdminUser = !!session;
   const [comment, setComment] = useState("");
@@ -386,7 +387,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
     
     // Attempt thumbnail generation in background
     try {
-        const thumbnailFile = await extractStlThumbnail(file);
+        const thumbnailFile = await extractStlThumbnail(file, modelColor);
         if (thumbnailFile) {
             formData.append("thumbnail", thumbnailFile);
         }
@@ -562,6 +563,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
             onPointSelected={handlePointSelected}
             selectedPoint={selectedPoint}
             cameraTarget={cameraTarget}
+            modelColor={modelColor}
           />
           </div>
         ) : (

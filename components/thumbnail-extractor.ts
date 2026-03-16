@@ -7,7 +7,7 @@ import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
  * thumbnail of the given STL file string without relying on Web Workers, 
  * which often have bundler and deployment issues.
  */
-export async function extractStlThumbnail(stlFile: File, width = 400, height = 300): Promise<File | null> {
+export async function extractStlThumbnail(stlFile: File, modelColor = "#5CB892", width = 400, height = 300): Promise<File | null> {
   return new Promise((resolve) => {
     try {
       const blobUrl = URL.createObjectURL(stlFile);
@@ -67,7 +67,7 @@ export async function extractStlThumbnail(stlFile: File, width = 400, height = 3
             geometry.scale(scale, scale, scale);
 
             const material = new THREE.MeshStandardMaterial({ 
-              color: "#5CB892", 
+              color: modelColor, 
               roughness: 0.4, 
               metalness: 0.5 
             });

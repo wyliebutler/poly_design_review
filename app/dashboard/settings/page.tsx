@@ -10,6 +10,7 @@ export default function SettingsPage() {
     appName: "Design Review Portal",
     primaryColor: "#71C6AC",
     secondaryColor: "#1B6378",
+    modelColor: "#5CB892",
     logoUrl: "",
   });
   const [loading, setLoading] = useState(true);
@@ -88,8 +89,8 @@ export default function SettingsPage() {
 
         {/* Colors */}
         <div className="space-y-4 pt-4">
-          <h2 className="text-lg font-bold uppercase tracking-tight italic text-slate-800 border-b border-slate-100 pb-2">Theme Colors</h2>
-          <div className="grid grid-cols-2 gap-6">
+          <h2 className="text-lg font-bold uppercase tracking-tight italic text-slate-800 border-b border-slate-100 pb-2">Theme & Model Colors</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">Primary Color (Light Teal)</label>
               <div className="flex gap-3">
@@ -122,6 +123,24 @@ export default function SettingsPage() {
                   className="flex-1 rounded-xl border-slate-200 shadow-sm focus:border-poly-teal-light focus:ring-poly-teal-light p-3 border uppercase font-mono bg-slate-50 text-slate-900"
                   value={formData.secondaryColor}
                   onChange={(e) => setFormData({ ...formData, secondaryColor: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">3D Model Color</label>
+              <div className="flex gap-3">
+                <input
+                  type="color"
+                  className="h-12 w-16 p-1 rounded-lg border border-slate-200 cursor-pointer"
+                  value={formData.modelColor}
+                  onChange={(e) => setFormData({ ...formData, modelColor: e.target.value })}
+                />
+                <input
+                  type="text"
+                  className="flex-1 rounded-xl border-slate-200 shadow-sm focus:border-poly-teal-light focus:ring-poly-teal-light p-3 border uppercase font-mono bg-slate-50 text-slate-900"
+                  value={formData.modelColor}
+                  onChange={(e) => setFormData({ ...formData, modelColor: e.target.value })}
                 />
               </div>
             </div>
