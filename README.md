@@ -54,12 +54,19 @@ RESEND_FROM_EMAIL="notifications@yourdomain.com"
 *Note: The `DATABASE_URL` is automatically provided by `docker-compose.yml`.*
 
 ### 3. Spin Up Docker Containers
-If you have the `docker-compose.yml` file, simply pull and start the containers. The Next.js container will automatically verify and initialize the database schema.
+If you have configured GHCR access (or made the package public), simply pull and start the containers. The Next.js container will automatically verify and initialize the database schema.
 
 ```bash
-docker compose pull
+docker compose pull app
 docker compose up -d
 ```
+
+### Alternative: Build Locally (Bypass Registry)
+If you prefer not to use the GHCR registry or are encountering authentication issues, you can always build the application directly from the source code on your server:
+
+1. Update the `docker-compose.yml` file to build locally by replacing `image: ghcr.io/wyliebutler/poly_design_review:latest` with `build: .`
+2. Pull the latest source code: `git pull origin main`
+3. Build and run: `docker compose up -d --build`
 
 Once completed, the portal should be accessible via port `3000` on your host machine.
 
@@ -79,6 +86,8 @@ When a new feature or bug fix is released, updating the live application implies
    ```bash
    docker compose up -d
    ```
+
+*(If you are using the Local Build method instead of the registry, you would run `git pull origin main` followed by `docker compose up -d --build`)*
 
 3. **(Optional) Clean Up Disk Space**
    Docker does not unilaterally delete your old unused images when downloading a new version. To free up storage space on the deployment server over time, routinely prune dangling images:
