@@ -56,6 +56,8 @@ function Model({
     if (geom.boundingBox) {
       const dimensions = new THREE.Vector3();
       geom.boundingBox.getSize(dimensions);
+      const center = new THREE.Vector3();
+      geom.boundingBox.getCenter(center);
 
       let vol = 0;
       let area = 0;
@@ -88,7 +90,7 @@ function Model({
       const finalArea = area;
 
       setTimeout(() => {
-        if (onLoadRef.current) onLoadRef.current(dimensions, finalVolume, finalArea);
+        if (onLoadRef.current) onLoadRef.current(dimensions, finalVolume, finalArea, center);
       }, 0);
     }
   }, [geom]);
@@ -286,11 +288,11 @@ function CameraAnimator({ target }: { target: { x: number, y: number, z: number 
   return null;
 }
 
-function AutoFitCamera({ dimensions, resetCounter }: { dimensions: THREE.Vector3 | null, resetCounter: number }) {
+function AutoFitCamera({ dimensions, center, resetCounter }: { dimensions: THREE.Vector3 | null, center: THREE.Vector3 | null, resetCounter: number }) {
   const { camera, controls } = useThree() as any;
   
   useEffect(() => {
-    if (dimensions && controls && camera) {
+    if (dimensions && center && controls && camera) {
       // Calculate the radius of the bounding sphere (diagonal length / 2)
       const radius = dimensions.length() / 2;
       
@@ -309,12 +311,12 @@ function AutoFitCamera({ dimensions, resetCounter }: { dimensions: THREE.Vector3
       // Set camera to an isometric angle relative to the center origin, preserving exact distance cameraZ
       // Since it's at a 45 degree diagonal across all 3 axes, we divide the hypotenuse by sqrt(3)
       const offset = cameraZ / Math.sqrt(3);
-      camera.position.set(offset, offset, offset);
+      camera.position.set(center.x + offset, center.y + offset, center.z + offset);
       camera.near = 0.1;
       camera.far = cameraZ * 10;
       
       // Center the orbit controls on the true geometric origin
-      controls.target.set(0, 0, 0);
+      controls.target.copy(center);
       
       camera.updateProjectionMatrix();
       controls.update();
@@ -450,10 +452,11 @@ const StlViewerComponent = ({
           <Stage environment={diffMode ? "city" : "city"} intensity={0.5} shadows={{ type: "contact", opacity: 0.5, blur: 2 }} adjustCamera={false}>
               <Model 
               url={url} 
-              onLoad={(dim, vol, area) => {
+              onLoad={(dim, vol, area, center) => {
                 setDimensions(dim);
                 setVolume(vol);
                 setSurfaceArea(area);
+                setModelCenter(center);
               }} 
               pinMode={pinMode}
               pinModeSetter={setPinMode}
@@ -588,7 +591,7 @@ const StlViewerComponent = ({
             <GizmoViewcube />
           </GizmoHelper>
           <CameraAnimator target={cameraTarget} />
-          {dimensions && <AutoFitCamera dimensions={dimensions} resetCounter={resetCameraCount} />}
+          {dimensions && modelCenter && <AutoFitCamera dimensions={dimensions} center={modelCenter} resetCounter={resetCameraCount} />}
         </Suspense>
       </Canvas>
     </ErrorBoundary>
