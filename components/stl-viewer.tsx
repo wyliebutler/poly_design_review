@@ -2,7 +2,7 @@
 
 import { Canvas, useLoader, useThree, useFrame } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, Stage, Html, Line, PerspectiveCamera, Bounds, Grid, GizmoHelper, GizmoViewcube } from "@react-three/drei";
+import { OrbitControls, Environment, Stage, Html, Line, PerspectiveCamera, Bounds, Grid, GizmoHelper, GizmoViewcube } from "@react-three/drei";
 import { Suspense, useState, useMemo, useRef, useEffect, memo } from "react";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box, Layers, Home } from "lucide-react";
@@ -49,8 +49,6 @@ function Model({
   onLoadRef.current = onLoad;
 
   useMemo(() => {
-    // Forcefully center the geometry to [0,0,0] ignoring original CAD origin
-    geom.center();
     geom.computeBoundingBox();
     
     if (geom.boundingBox) {
@@ -308,20 +306,21 @@ function AutoFitCamera({ dimensions, center, resetCounter }: { dimensions: THREE
       // Add a 1.25x margin so the model doesn't touch the edges of the canvas
       cameraZ *= 1.25; 
 
-      // Set camera to an isometric angle relative to the center origin, preserving exact distance cameraZ
+      // Set camera to an isometric angle relative to the centered bounding box
       // Since it's at a 45 degree diagonal across all 3 axes, we divide the hypotenuse by sqrt(3)
       const offset = cameraZ / Math.sqrt(3);
+      
       camera.position.set(center.x + offset, center.y + offset, center.z + offset);
       camera.near = 0.1;
       camera.far = cameraZ * 10;
       
-      // Center the orbit controls on the true geometric origin
+      // Center the orbit controls on the true geometric vertical center
       controls.target.copy(center);
       
       camera.updateProjectionMatrix();
       controls.update();
     }
-  }, [dimensions, camera, controls, resetCounter]);
+  }, [dimensions, center, camera, controls, resetCounter]);
   
   return null;
 }
@@ -449,7 +448,7 @@ const StlViewerComponent = ({
           <ambientLight intensity={diffMode ? 0.8 : 0.5} />
         <pointLight position={[10, 10, 10]} intensity={diffMode ? 1.5 : 1} castShadow />
         <Suspense fallback={<FallbackLoader />}>
-          <Stage environment={diffMode ? "city" : "city"} intensity={0.5} shadows={{ type: "contact", opacity: 0.5, blur: 2 }} adjustCamera={false}>
+          <Environment preset="city" />
               <Model 
               url={url} 
               onLoad={(dim, vol, area, center) => {
@@ -578,9 +577,7 @@ const StlViewerComponent = ({
               sectionThickness={1.0} 
               sectionColor="#1B6378" 
               fadeDistance={100} 
-              fadeStrength={5} 
             />
-          </Stage>
           <OrbitControls 
             makeDefault 
             enablePan={!pinMode} 
