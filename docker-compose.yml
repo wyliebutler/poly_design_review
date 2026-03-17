@@ -15,6 +15,7 @@ services:
       retries: 5
 
   app:
+    build: .
     image: ghcr.io/wyliebutler/poly_design_review:latest
     restart: always
     ports:

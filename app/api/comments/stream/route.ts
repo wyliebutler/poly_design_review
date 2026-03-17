@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
             where: { revisionId },
             orderBy: { createdAt: 'asc' }
         });
-        sendEvent(initialComments);
+        // sendEvent(initialComments); // removed, conflicts with optimistic UI
       } catch (err) {
         console.error("Failed to stream initial state:", err);
       }

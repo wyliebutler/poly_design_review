@@ -135,7 +135,6 @@ export default function ProjectList({ projects = [] }: ProjectListProps) {
               </button>
               <Link
                 href={`/review/${project.obfuscatedId}`}
-                target="_blank"
                 className="p-2 bg-white/90 backdrop-blur-md border border-slate-200 rounded-full hover:bg-poly-teal-light hover:text-white hover:border-poly-teal-light text-slate-600 transition-all"
                 title="Open Review"
               >

@@ -564,6 +564,7 @@ export default function ReviewClient({ project, currentRevision: initialRevision
             selectedPoint={selectedPoint}
             cameraTarget={cameraTarget}
             modelColor={modelColor}
+            onDeleteComment={handleDeleteComment}
           />
           </div>
         ) : (

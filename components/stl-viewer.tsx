@@ -2,10 +2,10 @@
 
 import { Canvas, useLoader, useThree, useFrame } from "@react-three/fiber";
 import type { ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, Stage, Html, Line, PerspectiveCamera, Bounds } from "@react-three/drei";
+import { OrbitControls, Stage, Html, Line, PerspectiveCamera, Bounds, Grid, GizmoHelper, GizmoViewcube } from "@react-three/drei";
 import { Suspense, useState, useMemo, useRef, useEffect, memo } from "react";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box, Layers } from "lucide-react";
+import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box, Layers, Home } from "lucide-react";
 import * as THREE from "three";
 import type { Comment } from "@prisma/client";
 import { ErrorBoundary } from "./error-boundary";
@@ -27,7 +27,7 @@ function Model({
   onSnapPointChange
 }: { 
   url: string, 
-  onLoad: (dimensions: THREE.Vector3, volume: number, surfaceArea: number) => void,
+  onLoad: (dimensions: THREE.Vector3, volume: number, surfaceArea: number, center: THREE.Vector3) => void,
   pinMode: boolean,
   pinModeSetter?: (mode: boolean) => void,
   showMeasurements: boolean,
@@ -49,7 +49,10 @@ function Model({
   onLoadRef.current = onLoad;
 
   useMemo(() => {
+    // Forcefully center the geometry to [0,0,0] ignoring original CAD origin
+    geom.center();
     geom.computeBoundingBox();
+    
     if (geom.boundingBox) {
       const dimensions = new THREE.Vector3();
       geom.boundingBox.getSize(dimensions);
@@ -256,7 +259,7 @@ function Model({
         clipShadows={true}
         side={showSlice ? THREE.DoubleSide : THREE.FrontSide}
         transparent={isDiffMode}
-        opacity={isDiffMode ? 0.8 : 1}
+        opacity={isDiffMode ? (diffColor === "#00ff00" ? 0.8 : 0.8) : 1}
         depthWrite={!isDiffMode}
         blending={isDiffMode ? THREE.AdditiveBlending : THREE.NormalBlending}
       />
@@ -283,33 +286,40 @@ function CameraAnimator({ target }: { target: { x: number, y: number, z: number 
   return null;
 }
 
-function AutoFitCamera({ dimensions }: { dimensions: THREE.Vector3 | null }) {
+function AutoFitCamera({ dimensions, resetCounter }: { dimensions: THREE.Vector3 | null, resetCounter: number }) {
   const { camera, controls } = useThree() as any;
   
   useEffect(() => {
     if (dimensions && controls && camera) {
-      // Calculate the maximum dimension to ensure the whole model fits
-      const maxDim = Math.max(dimensions.x, dimensions.y, dimensions.z);
+      // Calculate the radius of the bounding sphere (diagonal length / 2)
+      const radius = dimensions.length() / 2;
       
-      // Calculate required camera distance based on FOV
+      // Calculate required camera distance based on FOV to fit the entire sphere
       const fov = (camera.fov * Math.PI) / 180;
-      let cameraZ = Math.abs((maxDim / 2) / Math.tan(fov / 2));
+      let cameraZ = Math.abs(radius / Math.sin(fov / 2));
       
-      // Add a 1.5x margin so the model doesn't touch the edges of the canvas
-      cameraZ *= 1.5; 
+      // Accommodate portrait screens by adjusting required distance by aspect ratio
+      if (camera.aspect < 1) {
+        cameraZ = cameraZ / camera.aspect;
+      }
+      
+      // Add a 1.25x margin so the model doesn't touch the edges of the canvas
+      cameraZ *= 1.25; 
 
-      // Set camera to an isometric angle
-      camera.position.set(cameraZ, cameraZ, cameraZ);
+      // Set camera to an isometric angle relative to the center origin, preserving exact distance cameraZ
+      // Since it's at a 45 degree diagonal across all 3 axes, we divide the hypotenuse by sqrt(3)
+      const offset = cameraZ / Math.sqrt(3);
+      camera.position.set(offset, offset, offset);
       camera.near = 0.1;
       camera.far = cameraZ * 10;
       
-      // Center the orbit controls
+      // Center the orbit controls on the true geometric origin
       controls.target.set(0, 0, 0);
       
       camera.updateProjectionMatrix();
       controls.update();
     }
-  }, [dimensions, camera, controls]);
+  }, [dimensions, camera, controls, resetCounter]);
   
   return null;
 }
@@ -334,7 +344,8 @@ const StlViewerComponent = ({
   onPointSelected,
   selectedPoint = null,
   cameraTarget = null,
-  modelColor
+  modelColor,
+  onDeleteComment
 }: { 
   url: string,
   diffUrl?: string,
@@ -343,7 +354,8 @@ const StlViewerComponent = ({
   onPointSelected?: (point: { x: number, y: number, z: number } | null) => void,
   selectedPoint?: { x: number, y: number, z: number } | null,
   cameraTarget?: { x: number, y: number, z: number } | null,
-  modelColor?: string
+  modelColor?: string,
+  onDeleteComment?: (id: string) => Promise<void>
 }) => {
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [showSlice, setShowSlice] = useState(false);
@@ -353,11 +365,13 @@ const StlViewerComponent = ({
   const [showHelp, setShowHelp] = useState(false);
   const [pinMode, setPinMode] = useState(false);
   const [dimensions, setDimensions] = useState<THREE.Vector3 | null>(null);
+  const [modelCenter, setModelCenter] = useState<THREE.Vector3 | null>(null);
   const [volume, setVolume] = useState<number | null>(null);
   const [surfaceArea, setSurfaceArea] = useState<number | null>(null);
   const [activePin, setActivePin] = useState<string | null>(null);
   const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
   const [snapInfo, setSnapInfo] = useState<{ position: THREE.Vector3, normal: THREE.Vector3, distance: number } | null>(null);
+  const [resetCameraCount, setResetCameraCount] = useState(0);
 
   useEffect(() => {
     // 1. Preload new adjacent URLs
@@ -382,6 +396,29 @@ const StlViewerComponent = ({
     }
 
   }, [preloadUrls, url, diffUrl]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        // If they are in a text input (e.g., commenting), do not intercept
+        if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+          return;
+        }
+
+        if (activePin && onDeleteComment) {
+          e.preventDefault();
+          onDeleteComment(activePin);
+          setActivePin(null);
+        } else if (showMeasurements && measurePoints.length > 0) {
+          e.preventDefault();
+          setMeasurePoints(prev => prev.slice(0, -1));
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activePin, onDeleteComment, showMeasurements, measurePoints.length]);
 
   const handleMeasurePointAdded = (point: THREE.Vector3) => {
     setMeasurePoints((prev) => {
@@ -526,6 +563,20 @@ const StlViewerComponent = ({
                 </Html>
               </>
             )}
+
+            <Grid 
+              position={[0, dimensions ? -(dimensions.y / 2.01) : 0, 0]} 
+              infiniteGrid
+              args={[200, 200]} 
+              cellSize={1} 
+              cellThickness={0.5} 
+              cellColor="#cbd5e1" 
+              sectionSize={5} 
+              sectionThickness={1.0} 
+              sectionColor="#1B6378" 
+              fadeDistance={100} 
+              fadeStrength={5} 
+            />
           </Stage>
           <OrbitControls 
             makeDefault 
@@ -533,13 +584,24 @@ const StlViewerComponent = ({
             enableRotate={!pinMode} 
             enableZoom={true} 
           />
+          <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
+            <GizmoViewcube />
+          </GizmoHelper>
           <CameraAnimator target={cameraTarget} />
-          {dimensions && <AutoFitCamera dimensions={dimensions} />}
+          {dimensions && <AutoFitCamera dimensions={dimensions} resetCounter={resetCameraCount} />}
         </Suspense>
       </Canvas>
     </ErrorBoundary>
     <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-50 pointer-events-auto">
         <div className="flex gap-2">
+            <button
+                onClick={() => setResetCameraCount(c => c + 1)}
+                className="p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest bg-white/90 backdrop-blur border-slate-200 text-slate-500 hover:bg-white text-poly-indigo"
+                title="Reset View"
+            >
+                <Home className="h-4 w-4" />
+                Home
+            </button>
             <button
                 onClick={() => setShowHelp(true)}
                 className="p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest bg-white/90 backdrop-blur border-slate-200 text-slate-500 hover:bg-white"
@@ -645,9 +707,9 @@ const StlViewerComponent = ({
               {diffMode && (
                 <div className="text-white flex items-center gap-2 bg-slate-900 px-2 py-1 rounded">
                   <Layers className="h-3 w-3" />
-                  <span className="text-green-500 mr-1">Green:</span> Additions 
-                  <span className="text-red-500 mx-1">Red:</span> Deletions
-                  <span className="text-yellow-500 ml-1">Yellow:</span> Unchanged
+                  <span className="text-[#00ff00] mr-1 drop-shadow-sm font-bold">Green:</span> Additions 
+                  <span className="text-[#ff0000] mx-1 drop-shadow-sm font-bold">Red:</span> Deletions
+                  <span className="text-yellow-500 ml-1 font-bold">Yellow:</span> Overlap
                 </div>
               )}
               {showSlice && (
@@ -741,7 +803,6 @@ const StlViewerComponent = ({
             </div>
          </div>
       )}
-
       {/* Help Modal */}
       {showHelp && (
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center pointer-events-auto p-4 animate-in fade-in">
@@ -795,7 +856,7 @@ const StlViewerComponent = ({
                               <Layers className="h-5 w-5 text-slate-900 shrink-0" />
                               <div>
                                   <strong className="block text-slate-900">Diff Viewer</strong>
-                                  If a previous revision exists, click "Diff" to see a visual comparison. <strong className="text-green-600">Green</strong> indicates new geometry, <strong className="text-red-600">Red</strong> indicates deleted geometry, and <strong className="text-yellow-500">Yellow</strong> indicates unchanged, overlapping geometry.
+                                  If a previous revision exists, click "Diff" to see a visual comparison. <strong className="text-[#00ff00]">Green</strong> indicates new geometry, <strong className="text-[#ff0000]">Red</strong> indicates deleted geometry, and <strong className="text-yellow-500">Yellow</strong> indicates unchanged, overlapping geometry.
                               </div>
                           </li>
                       </ul>
