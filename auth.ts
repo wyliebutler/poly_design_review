@@ -15,7 +15,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       async authorize(credentials) {
         // Simplified for V2: "Ler542111!!" as requested for the server
         // Verify credentials securely via environment variables
-        const adminPass = process.env.ADMIN_PASSWORD || "admin";
+        const adminPass = process.env.ADMIN_PASSWORD;
+        if (!adminPass) {
+          throw new Error("ADMIN_PASSWORD environment variable is not set. Refusing authentication.");
+        }
         if (credentials?.password === adminPass) {
           return { 
             id: "admin", 

@@ -1,6 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+function escapeHTML(str: string): string {
+  const htmlEntities: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;'
+  };
+  return str.replace(/[&<>'"]/g, tag => htmlEntities[tag] || tag);
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const token = searchParams.get("token");
@@ -37,7 +48,7 @@ export async function GET(request: Request) {
         <body>
           <div class="card">
             <h1>Successfully Unsubscribed</h1>
-            <p>You will no longer receive email notifications for the project: <strong>${subscriber.project.name}</strong>.</p>
+            <p>You will no longer receive email notifications for the project: <strong>${escapeHTML(subscriber.project.name)}</strong>.</p>
             <p>You can close this window at any time.</p>
           </div>
         </body>

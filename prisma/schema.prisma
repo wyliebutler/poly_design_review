@@ -65,6 +65,7 @@ model Comment {
   
   authorName    String    // "Admin" or "Client"
   content       String    @db.Text
+  editToken     String?   // Token for unauthenticated users to edit/delete
   x             Float?
   y             Float?
   z             Float?

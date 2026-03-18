@@ -321,11 +321,18 @@ export default function ReviewClient({ project, currentRevision: initialRevision
       const result = await postComment(formData);
       
       if (result && "error" in result) {
-        toast.error("Upload Failed", { description: result.error });
+        toast.error("Upload Failed", { description: result.error as string });
         return;
       }
       
-      setLiveComments(prev => [...prev, result as Comment]);
+      const newComment = result as Comment & { editToken?: string | null };
+      if (newComment.editToken) {
+        const storedTokens = JSON.parse(localStorage.getItem("portal_edit_tokens") || "{}");
+        storedTokens[newComment.id] = newComment.editToken;
+        localStorage.setItem("portal_edit_tokens", JSON.stringify(storedTokens));
+      }
+      
+      setLiveComments(prev => [...prev, newComment]);
       setComment("");
       setSelectedPoint(null);
       removeSnapshot();
@@ -342,7 +349,9 @@ export default function ReviewClient({ project, currentRevision: initialRevision
   const handleEditComment = React.useCallback(async (commentId: string, newContent: string) => {
     setIsPending(true);
     try {
-      const result = await editComment(commentId, newContent, authorName);
+      const storedTokens = JSON.parse(localStorage.getItem("portal_edit_tokens") || "{}");
+      const editToken = storedTokens[commentId];
+      const result = await editComment(commentId, newContent, authorName, editToken);
       if (result && "error" in result) {
         toast.error("Edit Failed", { description: result.error });
         return;
@@ -361,7 +370,9 @@ export default function ReviewClient({ project, currentRevision: initialRevision
   const handleDeleteComment = React.useCallback(async (commentId: string) => {
     setIsPending(true);
     try {
-      const result = await deleteComment(commentId, authorName);
+      const storedTokens = JSON.parse(localStorage.getItem("portal_edit_tokens") || "{}");
+      const editToken = storedTokens[commentId];
+      const result = await deleteComment(commentId, authorName, editToken);
       if (result && result.error) {
         toast.error("Delete Failed", { description: result.error });
         return;

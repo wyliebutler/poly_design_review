@@ -8,6 +8,7 @@ import { sendNewRevisionEmail, sendNewCommentEmail } from "@/lib/email";
 import { Prisma } from "@prisma/client";
 import { writeFile, mkdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 
 export type ProjectWithRevisions = Prisma.ProjectGetPayload<{
   include: {
@@ -374,6 +375,8 @@ export async function postComment(formData: FormData): Promise<{ error?: string 
   // Set userId: null to avoid foreign key errors if the user isn't in the DB
   const userIdToLink = isAuthorAdmin && session?.user?.id ? session.user.id : null;
   
+  const editToken = (!isAuthorAdmin || !session?.user) ? randomUUID() : null;
+  
   let snapshotUrl: string | null = null;
   
   if (snapshotFile && snapshotFile.size > 0) {
@@ -416,6 +419,7 @@ export async function postComment(formData: FormData): Promise<{ error?: string 
         content,
         authorName: finalAuthorName,
         userId: null,
+        editToken,
         x,
         y,
         z,
@@ -516,7 +520,7 @@ export async function getFullProjectHistory(projectId: string): Promise<{ error?
   }
 }
 
-export async function editComment(commentId: string, content: string, clientAuthorName: string): Promise<{ error?: string } | import("@prisma/client").Comment> {
+export async function editComment(commentId: string, content: string, clientAuthorName: string, editToken?: string): Promise<{ error?: string } | import("@prisma/client").Comment> {
   const session = await auth();
   
   if (!commentId || !content.trim()) return { error: "Invalid input" };
@@ -525,8 +529,8 @@ export async function editComment(commentId: string, content: string, clientAuth
     const comment = await prisma.comment.findUnique({ where: { id: commentId } });
     if (!comment) return { error: "Comment not found" };
     
-    // Security check: Either user is Admin with active session, or their authorName matches
-    const isOwner = comment.authorName === clientAuthorName;
+    // Security check: Either user is Admin with active session, or token matches
+    const isOwner = !!comment.editToken && comment.editToken === editToken;
     const isAdmin = !!session?.user;
     
     if (!isOwner && !isAdmin) {
@@ -545,7 +549,7 @@ export async function editComment(commentId: string, content: string, clientAuth
   }
 }
 
-export async function deleteComment(commentId: string, clientAuthorName: string): Promise<{ error?: string, success?: boolean }> {
+export async function deleteComment(commentId: string, clientAuthorName: string, editToken?: string): Promise<{ error?: string, success?: boolean }> {
   const session = await auth();
   
   if (!commentId) return { error: "Invalid comment ID" };
@@ -554,8 +558,8 @@ export async function deleteComment(commentId: string, clientAuthorName: string)
     const comment = await prisma.comment.findUnique({ where: { id: commentId } });
     if (!comment) return { error: "Comment not found" };
     
-    // Security check: Either user is Admin with active session, or their authorName matches
-    const isOwner = comment.authorName === clientAuthorName;
+    // Security check: Either user is Admin with active session, or token matches
+    const isOwner = !!comment.editToken && comment.editToken === editToken;
     const isAdmin = !!session?.user;
     
     if (!isOwner && !isAdmin) {

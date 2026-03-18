@@ -43,7 +43,7 @@ export default async function ReviewPage(props: { params: Promise<{ id: string }
       <div className="min-h-screen flex items-center justify-center bg-slate-50 text-red-600 p-10 font-mono text-center">
         <div className="max-w-md border border-red-200 p-12 bg-red-50 rounded-2xl shadow-sm">
           <h1 className="text-2xl font-black mb-4 uppercase">System Exception</h1>
-          <p className="border-t border-red-200 pt-4 text-xs">{error.message}</p>
+          <p className="border-t border-red-200 pt-4 text-xs">An unexpected server error occurred.</p>
         </div>
       </div>
     );
