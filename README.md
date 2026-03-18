@@ -45,6 +45,7 @@ Create a `.env` file and `docker-compose.yml` on your server.
 ```bash
 # .env
 AUTH_SECRET="some-secure-random-string"
+# CRITICAL: ADMIN_PASSWORD must be set or the portal will refuse logins
 ADMIN_PASSWORD="my-secure-password"
 NODE_ENV="production"
 RESEND_API_KEY="re_123456789_abcdefg"
@@ -53,7 +54,15 @@ RESEND_FROM_EMAIL="notifications@yourdomain.com"
 
 *Note: The `DATABASE_URL` is automatically provided by `docker-compose.yml`.*
 
-### 3. Spin Up Docker Containers
+### 3. File Permissions
+The 3D design files and snapshot images are saved to the server's disk inside the `public/uploads` directory. Because the Docker container runs securely as a non-root user (`nextjs`), this remote directory must exist and be writable before starting the app:
+
+```bash
+mkdir -p public/uploads
+chmod -R 777 public/uploads
+```
+
+### 4. Spin Up Docker Containers
 If you have configured GHCR access (or made the package public), simply pull and start the containers. The Next.js container will automatically verify and initialize the database schema.
 
 ```bash
