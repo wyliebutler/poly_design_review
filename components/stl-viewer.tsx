@@ -9,6 +9,8 @@ import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box, Layer
 import * as THREE from "three";
 import type { Comment } from "@prisma/client";
 import { ErrorBoundary } from "./error-boundary";
+import { updateProjectBackground, resetProjectBackground } from "@/lib/actions";
+import { toast } from "sonner";
 
 function Model({ 
   url, 
@@ -346,7 +348,11 @@ const StlViewerComponent = ({
   selectedPoint = null,
   cameraTarget = null,
   modelColor,
-  onDeleteComment
+  onDeleteComment,
+  projectId = "",
+  isAdminUser = false,
+  projectBgUrl = null,
+  projectBgOpacity = 0.2
 }: { 
   url: string,
   diffUrl?: string,
@@ -356,7 +362,11 @@ const StlViewerComponent = ({
   selectedPoint?: { x: number, y: number, z: number } | null,
   cameraTarget?: { x: number, y: number, z: number } | null,
   modelColor?: string,
-  onDeleteComment?: (id: string) => Promise<void>
+  onDeleteComment?: (id: string) => Promise<void>,
+  projectId?: string,
+  isAdminUser?: boolean,
+  projectBgUrl?: string | null,
+  projectBgOpacity?: number | null
 }) => {
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [showSlice, setShowSlice] = useState(false);
@@ -373,23 +383,47 @@ const StlViewerComponent = ({
   const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
   const [snapInfo, setSnapInfo] = useState<{ position: THREE.Vector3, normal: THREE.Vector3, distance: number } | null>(null);
   const [resetCameraCount, setResetCameraCount] = useState(0);
-  const [bgImage, setBgImage] = useState<string | null>('/watermark.png');
-  const [bgOpacity, setBgOpacity] = useState<number>(0.2);
+  const [localBgOpacity, setLocalBgOpacity] = useState<number>(projectBgOpacity ?? 0.2);
+  const [isUploadingBg, setIsUploadingBg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const bgImage = projectBgUrl || '/watermark.png';
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    setLocalBgOpacity(projectBgOpacity ?? 0.2);
+  }, [projectBgOpacity]);
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setBgImage(event.target.result as string);
-          setBgOpacity(0.8);
-        }
-      };
-      reader.readAsDataURL(file);
+    if (file && projectId && isAdminUser) {
+      setIsUploadingBg(true);
+      const formData = new FormData();
+      formData.append("bgFile", file);
+      formData.append("opacity", String(localBgOpacity));
+      
+      const result = await updateProjectBackground(projectId, formData);
+      setIsUploadingBg(false);
+      
+      if (result && "error" in result) {
+        toast.error("Upload Failed", { description: result.error as string });
+      } else {
+        toast.success("Background Uploaded");
+      }
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleRevertBackground = async () => {
+    if (!projectId || !isAdminUser) return;
+    setIsUploadingBg(true);
+    const result = await resetProjectBackground(projectId);
+    setIsUploadingBg(false);
+    
+    if (result && "error" in result) {
+      toast.error("Failed to reset", { description: result.error as string });
+    } else {
+      toast.success("Reverted to default background");
+    }
   };
 
   useEffect(() => {
@@ -466,7 +500,7 @@ const StlViewerComponent = ({
            src={bgImage} 
            alt="Background" 
            className="absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity duration-300" 
-           style={{ opacity: bgOpacity, zIndex: 0 }} 
+           style={{ opacity: localBgOpacity, zIndex: 0 }} 
          />
       )}
       <ErrorBoundary>
@@ -636,15 +670,30 @@ const StlViewerComponent = ({
                 <HelpCircle className="h-4 w-4" />
                 Help
             </button>
-            <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest bg-white/90 backdrop-blur border-slate-200 text-slate-500 hover:bg-white text-poly-indigo"
-                title="Change Background Photo"
-            >
-                <ImageIcon className="h-4 w-4" />
-                BG Photo
-            </button>
-            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+            {isAdminUser && (
+              <>
+                <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingBg}
+                    className="p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest bg-white/90 backdrop-blur border-slate-200 text-slate-500 hover:bg-white text-poly-indigo disabled:opacity-50"
+                    title="Change Background Photo"
+                >
+                    {isUploadingBg ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                    BG Photo
+                </button>
+                {projectBgUrl && (
+                    <button
+                        onClick={handleRevertBackground}
+                        disabled={isUploadingBg}
+                        className="p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest bg-white/90 backdrop-blur border-slate-200 text-slate-500 hover:bg-white text-rose-500 disabled:opacity-50"
+                        title="Revert to Default Background"
+                    >
+                        Revert BG
+                    </button>
+                )}
+                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+              </>
+            )}
             {diffUrl && (
               <button
                   onClick={() => {
@@ -725,15 +774,20 @@ const StlViewerComponent = ({
             </button>
         </div>
 
-        {bgImage && !diffMode && (
+        {isAdminUser && bgImage && !diffMode && (
            <div className="bg-white/90 backdrop-blur border border-slate-200 p-3 rounded-xl shadow-lg flex flex-col gap-2 pointer-events-auto w-full">
              <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-500">
                <span>BG Opacity</span>
-               {bgImage !== '/watermark.png' && (
-                 <button onClick={() => { setBgImage('/watermark.png'); setBgOpacity(0.2); }} className="text-red-500 hover:text-red-700">Reset</button>
-               )}
              </div>
-             <input type="range" min="0" max="1" step="0.05" value={bgOpacity} onChange={(e) => setBgOpacity(Number(e.target.value))} className="w-full accent-poly-indigo" />
+             <input 
+               type="range" 
+               min="0" 
+               max="1" 
+               step="0.05" 
+               value={localBgOpacity} 
+               onChange={(e) => setLocalBgOpacity(Number(e.target.value))}
+               className="w-full accent-poly-indigo" 
+             />
            </div>
         )}
 

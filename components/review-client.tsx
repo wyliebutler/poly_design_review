@@ -576,6 +576,10 @@ export default function ReviewClient({ project, currentRevision: initialRevision
             cameraTarget={cameraTarget}
             modelColor={modelColor}
             onDeleteComment={handleDeleteComment}
+            projectId={project.id}
+            isAdminUser={isAdminUser}
+            projectBgUrl={project.backgroundUrl}
+            projectBgOpacity={project.backgroundOpacity}
           />
           </div>
         ) : (

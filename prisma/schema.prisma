@@ -31,6 +31,8 @@ model Project {
   obfuscatedId      String    @unique @default(uuid())
   isArchived        Boolean   @default(false)
   notificationEmail String?
+  backgroundUrl     String?
+  backgroundOpacity Float?    @default(0.2)
   
   creatorId         String
   creator       User      @relation(fields: [creatorId], references: [id])

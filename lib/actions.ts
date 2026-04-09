@@ -622,3 +622,87 @@ export async function subscribeToProject(projectId: string, data: { name: string
   }
 }
 
+export async function updateProjectBackground(projectId: string, formData: FormData): Promise<{ error?: string } | import("@prisma/client").Project> {
+  const session = await auth();
+  if (!session?.user) return { error: "Unauthorized" };
+
+  const bgFile = formData.get("bgFile") as File;
+  if (!bgFile) return { error: "No image file uploaded" };
+
+  const uploadDir = join(process.cwd(), "public", "uploads");
+  await mkdir(uploadDir, { recursive: true });
+  
+  const extension = bgFile.name.split('.').pop() || "png";
+  const uniqueFilename = `bg_${Date.now()}_${Math.round(Math.random() * 1000)}.${extension}`;
+  const filePath = join(uploadDir, uniqueFilename);
+  
+  try {
+    const bytes = await bgFile.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    await writeFile(filePath, buffer);
+    
+    // Attempt to delete old background if one exists
+    const oldProject = await prisma.project.findUnique({ where: { id: projectId }});
+    if (oldProject?.backgroundUrl) {
+       const oldFile = oldProject.backgroundUrl.split("/").pop();
+       if (oldFile) {
+          try { await unlink(join(uploadDir, oldFile)); } catch (e) {}
+       }
+    }
+
+    const fileUrl = `/uploads/${uniqueFilename}`;
+    const opacity = formData.get("opacity") ? parseFloat(formData.get("opacity") as string) : 0.2;
+
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        backgroundUrl: fileUrl,
+        backgroundOpacity: opacity
+      }
+    });
+    
+    revalidatePath("/dashboard");
+    revalidatePath(`/review/${project.obfuscatedId}`);
+    return project;
+  } catch (error) {
+    console.error("[SERVER ERROR] Failed to update project background:", error);
+    return { error: "Failed to upload background" };
+  }
+}
+
+export async function resetProjectBackground(projectId: string): Promise<{ error?: string } | import("@prisma/client").Project> {
+  const session = await auth();
+  if (!session?.user) return { error: "Unauthorized" };
+
+  try {
+    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!project) return { error: "Project not found" };
+
+    if (project.backgroundUrl) {
+      const uploadDir = join(process.cwd(), "public", "uploads");
+      const filename = project.backgroundUrl.split("/").pop();
+      if (filename) {
+        try {
+          await unlink(join(uploadDir, filename));
+        } catch (err) {
+           console.error("Failed to delete background file", err);
+        }
+      }
+    }
+
+    const updatedProject = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        backgroundUrl: null,
+        backgroundOpacity: 0.2
+      }
+    });
+
+    revalidatePath("/dashboard");
+    revalidatePath(`/review/${updatedProject.obfuscatedId}`);
+    return updatedProject;
+  } catch (error) {
+    console.error("[SERVER ERROR] Failed to reset project background:", error);
+    return { error: "Failed to reset background" };
+  }
+}
