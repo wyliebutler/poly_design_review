@@ -5,7 +5,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Environment, Stage, Html, Line, PerspectiveCamera, Bounds, Grid, GizmoHelper, GizmoViewcube } from "@react-three/drei";
 import { Suspense, useState, useMemo, useRef, useEffect, memo } from "react";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box, Layers, Home } from "lucide-react";
+import { Ruler, MapPin, MousePointer2, Scissors, HelpCircle, Loader2, Box, Layers, Home, Image as ImageIcon } from "lucide-react";
 import * as THREE from "three";
 import type { Comment } from "@prisma/client";
 import { ErrorBoundary } from "./error-boundary";
@@ -373,6 +373,24 @@ const StlViewerComponent = ({
   const [measurePoints, setMeasurePoints] = useState<THREE.Vector3[]>([]);
   const [snapInfo, setSnapInfo] = useState<{ position: THREE.Vector3, normal: THREE.Vector3, distance: number } | null>(null);
   const [resetCameraCount, setResetCameraCount] = useState(0);
+  const [bgImage, setBgImage] = useState<string | null>('/watermark.png');
+  const [bgOpacity, setBgOpacity] = useState<number>(0.2);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setBgImage(event.target.result as string);
+          setBgOpacity(0.8);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   useEffect(() => {
     // 1. Preload new adjacent URLs
@@ -442,9 +460,17 @@ const StlViewerComponent = ({
   const bgStyle = diffMode ? 'bg-slate-900' : 'bg-slate-100';
 
   return (
-    <div className={`w-full h-full ${bgStyle} relative group ${pinMode || showMeasurements ? 'cursor-crosshair' : ''} transition-colors duration-500`}>
+    <div className={`w-full h-full ${bgStyle} relative group ${pinMode || showMeasurements ? 'cursor-crosshair' : ''} transition-colors duration-500 overflow-hidden`}>
+      {bgImage && !diffMode && (
+         <img 
+           src={bgImage} 
+           alt="Background" 
+           className="absolute inset-0 w-full h-full object-cover pointer-events-none transition-opacity duration-300" 
+           style={{ opacity: bgOpacity, zIndex: 0 }} 
+         />
+      )}
       <ErrorBoundary>
-        <Canvas shadows gl={{ localClippingEnabled: true, preserveDrawingBuffer: true }} camera={{ fov: 35 }}>
+        <Canvas shadows gl={{ localClippingEnabled: true, preserveDrawingBuffer: true, alpha: true }} camera={{ fov: 35 }} style={{ position: 'relative', zIndex: 10 }}>
           <ambientLight intensity={diffMode ? 0.8 : 0.5} />
         <pointLight position={[10, 10, 10]} intensity={diffMode ? 1.5 : 1} castShadow />
         <Suspense fallback={<FallbackLoader />}>
@@ -610,6 +636,15 @@ const StlViewerComponent = ({
                 <HelpCircle className="h-4 w-4" />
                 Help
             </button>
+            <button
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3 rounded-xl shadow-lg border transition-all flex items-center gap-2 text-[10px] uppercase font-black tracking-widest bg-white/90 backdrop-blur border-slate-200 text-slate-500 hover:bg-white text-poly-indigo"
+                title="Change Background Photo"
+            >
+                <ImageIcon className="h-4 w-4" />
+                BG Photo
+            </button>
+            <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
             {diffUrl && (
               <button
                   onClick={() => {
@@ -689,6 +724,18 @@ const StlViewerComponent = ({
                 Slice
             </button>
         </div>
+
+        {bgImage && !diffMode && (
+           <div className="bg-white/90 backdrop-blur border border-slate-200 p-3 rounded-xl shadow-lg flex flex-col gap-2 pointer-events-auto w-full">
+             <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-slate-500">
+               <span>BG Opacity</span>
+               {bgImage !== '/watermark.png' && (
+                 <button onClick={() => { setBgImage('/watermark.png'); setBgOpacity(0.2); }} className="text-red-500 hover:text-red-700">Reset</button>
+               )}
+             </div>
+             <input type="range" min="0" max="1" step="0.05" value={bgOpacity} onChange={(e) => setBgOpacity(Number(e.target.value))} className="w-full accent-poly-indigo" />
+           </div>
+        )}
 
         <div className={`pointer-events-none transition-opacity duration-300 ${pinMode || showMeasurements ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
             <div className="bg-white/90 backdrop-blur border border-slate-200 p-3 rounded-xl shadow-lg shadow-slate-200/50 text-[10px] uppercase font-black tracking-widest text-slate-500 flex flex-col items-end gap-2">
