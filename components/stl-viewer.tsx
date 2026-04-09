@@ -366,7 +366,8 @@ const StlViewerComponent = ({
   projectId?: string,
   isAdminUser?: boolean,
   projectBgUrl?: string | null,
-  projectBgOpacity?: number | null
+  projectBgOpacity?: number | null,
+  onBackgroundUpdate?: (url: string | null, opacity: number) => void
 }) => {
   const [showMeasurements, setShowMeasurements] = useState(false);
   const [showSlice, setShowSlice] = useState(false);
@@ -384,14 +385,17 @@ const StlViewerComponent = ({
   const [snapInfo, setSnapInfo] = useState<{ position: THREE.Vector3, normal: THREE.Vector3, distance: number } | null>(null);
   const [resetCameraCount, setResetCameraCount] = useState(0);
   const [localBgOpacity, setLocalBgOpacity] = useState<number>(projectBgOpacity ?? 0.2);
+  const [localBgUrl, setLocalBgUrl] = useState<string | null>(projectBgUrl ?? null);
   const [isUploadingBg, setIsUploadingBg] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const bgImage = projectBgUrl || '/watermark.png';
+  // Use the local URL to avoid vanishing on prop un-sync
+  const bgImage = localBgUrl || '/watermark.png';
 
   useEffect(() => {
     setLocalBgOpacity(projectBgOpacity ?? 0.2);
-  }, [projectBgOpacity]);
+    setLocalBgUrl(projectBgUrl ?? null);
+  }, [projectBgOpacity, projectBgUrl]);
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -408,6 +412,12 @@ const StlViewerComponent = ({
         toast.error("Upload Failed", { description: result.error as string });
       } else {
         toast.success("Background Uploaded");
+        const updatedProject = result as import("@prisma/client").Project;
+        setLocalBgUrl(updatedProject.backgroundUrl);
+        setLocalBgOpacity(updatedProject.backgroundOpacity ?? 0.2);
+        if (onBackgroundUpdate) {
+            onBackgroundUpdate(updatedProject.backgroundUrl, updatedProject.backgroundOpacity ?? 0.2);
+        }
       }
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -423,6 +433,12 @@ const StlViewerComponent = ({
       toast.error("Failed to reset", { description: result.error as string });
     } else {
       toast.success("Reverted to default background");
+      const updatedProject = result as import("@prisma/client").Project;
+      setLocalBgUrl(updatedProject.backgroundUrl);
+      setLocalBgOpacity(updatedProject.backgroundOpacity ?? 0.2);
+      if (onBackgroundUpdate) {
+          onBackgroundUpdate(updatedProject.backgroundUrl, updatedProject.backgroundOpacity ?? 0.2);
+      }
     }
   };
 

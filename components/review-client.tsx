@@ -61,6 +61,14 @@ export default function ReviewClient({ project, currentRevision: initialRevision
   const [comment, setComment] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [projectBgUrl, setProjectBgUrl] = useState<string | null>(project.backgroundUrl || null);
+  const [projectBgOpacity, setProjectBgOpacity] = useState<number>(project.backgroundOpacity ?? 0.2);
+
+  useEffect(() => {
+    setProjectBgUrl(project.backgroundUrl || null);
+    setProjectBgOpacity(project.backgroundOpacity ?? 0.2);
+  }, [project.backgroundUrl, project.backgroundOpacity]);
+
   const [currentRevision, setCurrentRevision] = useState<RevisionWithComments>(initialRevision);
   const [liveComments, setLiveComments] = useState<Comment[]>(initialRevision?.comments || []);
   const [projectRevisions, setProjectRevisions] = useState<RevisionWithComments[]>(project.revisions || []);
@@ -578,8 +586,12 @@ export default function ReviewClient({ project, currentRevision: initialRevision
             onDeleteComment={handleDeleteComment}
             projectId={project.id}
             isAdminUser={isAdminUser}
-            projectBgUrl={project.backgroundUrl}
-            projectBgOpacity={project.backgroundOpacity}
+            projectBgUrl={projectBgUrl}
+            projectBgOpacity={projectBgOpacity}
+            onBackgroundUpdate={(url, opacity) => {
+              setProjectBgUrl(url);
+              setProjectBgOpacity(opacity);
+            }}
           />
           </div>
         ) : (
